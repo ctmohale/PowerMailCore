@@ -4,7 +4,7 @@ Options -Indexes
     Require all denied
 </FilesMatch>
 
-<FilesMatch "^(config\.php|config\.example\.php|install\.sql|README\.md)$">
+<FilesMatch "^(config.*\.php|install.*\.sql|README.*\.md|setup-sqlite\.php|dev-router\.php)$">
     Require all denied
 </FilesMatch>
 
