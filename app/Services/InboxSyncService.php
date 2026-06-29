@@ -1,72 +1,77 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
-use App\Models\EmailAccount;
-use App\Models\ReceivedEmail;
+use App\Core\Database;
 use RuntimeException;
 
 class InboxSyncService
 {
-    public function __construct(private readonly ImapMailboxClient $mailboxClient) {}
+    private readonly ImapMailboxClient $client;
 
-    /**
-     * Sync the latest messages for one configured inbox.
-     *
-     * @return array{imported: int, skipped: int, total: int}
-     */
-    public function syncAccount(EmailAccount $account, int $limit = 25): array
+    public function __construct(?ImapMailboxClient $client = null)
     {
-        if (! $account->inbox_enabled) {
-            throw new RuntimeException('Inbox access is not enabled for this email account.');
+        $this->client = $client ?? new ImapMailboxClient();
+    }
+
+    public function syncAccount(array $account, int $limit = 25): array
+    {
+        if ((int) $account['inbox_enabled'] !== 1) {
+            throw new RuntimeException('Inbox access is not enabled for '.$account['email'].'.');
         }
 
-        if (! $account->imap_host || ! $account->imap_username || ! $account->imap_password) {
-            throw new RuntimeException('This email account is missing IMAP host, username, or password.');
+        if (! $account['imap_host'] || ! $account['imap_username'] || ! $account['imap_password']) {
+            throw new RuntimeException('Missing IMAP settings for '.$account['email'].'.');
         }
 
-        $messages = $this->mailboxClient->fetchLatest($account, $limit);
+        $messages = $this->client->fetchLatest($account, $limit);
         $imported = 0;
         $skipped = 0;
-        $latestUid = $account->last_inbound_uid;
+        $latestUid = (int) ($account['last_inbound_uid'] ?? 0);
 
         foreach ($messages as $message) {
-            $receivedEmail = ReceivedEmail::updateOrCreate(
-                [
-                    'email_account_id' => $account->id,
-                    'uid' => $message['uid'],
-                ],
-                [
-                    'client_id' => $account->client_id,
-                    'domain_id' => $account->domain_id,
-                    'message_id' => $message['message_id'] ?? null,
-                    'from_name' => $message['from_name'] ?? null,
-                    'from_email' => $message['from_email'] ?? null,
-                    'to_email' => $message['to_email'] ?? $account->email,
-                    'subject' => $message['subject'] ?? null,
-                    'body_text' => $message['body_text'] ?? null,
-                    'body_html' => $message['body_html'] ?? null,
-                    'raw_headers' => $message['raw_headers'] ?? null,
-                    'size' => $message['size'] ?? 0,
-                    'seen' => $message['seen'] ?? false,
-                    'received_at' => $message['received_at'] ?? null,
-                    'fetched_at' => now(),
-                ],
+            $existing = Database::fetch(
+                'select id from received_emails where email_account_id = ? and uid = ?',
+                [$account['id'], $message['uid']],
             );
 
-            $receivedEmail->wasRecentlyCreated ? $imported++ : $skipped++;
-            $latestUid = max((int) $latestUid, (int) $message['uid']);
+            if ($existing) {
+                $skipped++;
+            } else {
+                Database::insert(
+                    'insert into received_emails (client_id, domain_id, email_account_id, uid, message_id, from_name, from_email, to_email, subject, body_text, body_html, raw_headers, size, seen, received_at, fetched_at, created_at, updated_at)
+                     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now(), now(), now())',
+                    [
+                        $account['client_id'],
+                        $account['domain_id'],
+                        $account['id'],
+                        $message['uid'],
+                        $message['message_id'],
+                        $message['from_name'],
+                        $message['from_email'],
+                        $message['to_email'],
+                        $message['subject'],
+                        $message['body_text'],
+                        $message['body_html'],
+                        $message['raw_headers'],
+                        $message['size'],
+                        $message['seen'] ? 1 : 0,
+                        $message['received_at'],
+                    ],
+                );
+                $imported++;
+            }
+
+            $latestUid = max($latestUid, (int) $message['uid']);
         }
 
-        $account->forceFill([
-            'last_inbound_uid' => $latestUid,
-            'inbox_last_synced_at' => now(),
-        ])->save();
+        Database::execute(
+            'update email_accounts set last_inbound_uid = ?, inbox_last_synced_at = now(), updated_at = now() where id = ?',
+            [$latestUid, $account['id']],
+        );
 
-        return [
-            'imported' => $imported,
-            'skipped' => $skipped,
-            'total' => count($messages),
-        ];
+        return ['imported' => $imported, 'skipped' => $skipped, 'total' => count($messages)];
     }
 }
