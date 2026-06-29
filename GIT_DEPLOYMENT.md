@@ -33,6 +33,8 @@ bash scripts/cpanel-deploy.sh
 
 That script installs dependencies when Composer is available, runs migrations, and refreshes Laravel caches.
 
+This option requires Composer on cPanel, unless you manually upload the `vendor` folder once before deploying.
+
 ## Option B: GitHub Actions Auto Deploy
 
 Use this if you want deployment to happen automatically every time you push to `main`.
@@ -65,8 +67,11 @@ CPANEL_APP_PATH=/home/your_cpanel_username/powermail-core
 The workflow will:
 
 - run tests
+- build production Composer dependencies
 - upload changed files with `rsync`
 - run `scripts/cpanel-deploy.sh` on the server
+
+This is the best option if your cPanel does not have Composer, because GitHub builds and uploads the `vendor` folder.
 
 ## First Server Setup
 
