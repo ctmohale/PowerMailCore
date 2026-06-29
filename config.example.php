@@ -8,6 +8,7 @@ return [
         'key' => 'change-this-to-a-long-random-secret-key',
     ],
     'database' => [
+        'driver' => 'mysql',
         'host' => '127.0.0.1',
         'port' => 3306,
         'name' => 'beestac1_powermail',

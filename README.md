@@ -32,6 +32,18 @@ Password: password
 
 Change that password before using the app for real.
 
+## Local SQLite Setup
+
+For quick local testing without installing MySQL:
+
+```bash
+cp config.sqlite.example.php config.php
+php setup-sqlite.php
+php -S 127.0.0.1:8000 dev-router.php
+```
+
+Then open `http://127.0.0.1:8000/login`.
+
 ## Git Deployment
 
 For the easiest continuous deployment on cPanel, clone this repository directly into the folder used as the domain or subdomain document root. Then every cPanel Git pull updates the live PHP files without Composer, NPM, or Laravel build steps.

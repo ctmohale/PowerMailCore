@@ -22,6 +22,26 @@ class Database
             return self::$pdo;
         }
 
+        $driver = self::$config['driver'] ?? 'mysql';
+
+        if ($driver === 'sqlite') {
+            $path = self::$config['path'] ?? dirname(__DIR__, 2).'/storage/powermail.sqlite';
+            $directory = dirname($path);
+
+            if (! is_dir($directory)) {
+                mkdir($directory, 0775, true);
+            }
+
+            self::$pdo = new PDO('sqlite:'.$path, null, null, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            ]);
+            self::$pdo->sqliteCreateFunction('now', static fn () => date('Y-m-d H:i:s'));
+            self::$pdo->exec('PRAGMA foreign_keys = ON');
+
+            return self::$pdo;
+        }
+
         $charset = self::$config['charset'] ?? 'utf8mb4';
         $dsn = sprintf(
             'mysql:host=%s;port=%s;dbname=%s;charset=%s',

@@ -25,6 +25,8 @@ config.php
 !/storage/cache/.gitignore
 /storage/logs/*
 !/storage/logs/.gitignore
+/storage/*.sqlite
+/storage/*.sqlite-*
 /storage/*.key
 /storage/pail
 /vendor
