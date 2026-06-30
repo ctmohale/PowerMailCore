@@ -3,8 +3,10 @@
 @section('title', 'Login | PowerMail Core')
 
 @section('content')
-    <section class="panel compact">
+    <section class="auth-card panel compact">
+        <p class="eyebrow">PowerMail Core</p>
         <h1>Login</h1>
+        <p class="lede" style="margin-bottom: 18px;">Admin dashboard access.</p>
         <form method="POST" action="{{ route('login.store') }}">
             @csrf
             <div class="field">

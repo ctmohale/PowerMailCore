@@ -3,14 +3,25 @@
 @section('title', 'API Keys | PowerMail Core')
 
 @section('content')
-    <h1>API Keys</h1>
+    <div class="page-header">
+        <div class="page-title">
+            <p class="eyebrow">Access</p>
+            <h1>API Keys</h1>
+            <p class="lede">Application access overview.</p>
+        </div>
+    </div>
 
     @if (session('plain_api_key'))
         <div class="key-box">{{ session('plain_api_key') }}</div>
     @endif
 
     <section class="panel">
-        <h2>Create API Key</h2>
+        <div class="panel-header">
+            <div>
+                <h2>Create API Key</h2>
+                <p>Client-scoped credential.</p>
+            </div>
+        </div>
         <form method="POST" action="{{ route('api-keys.store') }}">
             @csrf
             <div class="form-grid">
@@ -35,7 +46,12 @@
     </section>
 
     <section class="panel">
-        <h2>API Key List</h2>
+        <div class="panel-header">
+            <div>
+                <h2>API Key List</h2>
+                <p>{{ $apiKeys->count() }} key{{ $apiKeys->count() === 1 ? '' : 's' }} issued.</p>
+            </div>
+        </div>
         <div class="table-wrap">
             <table>
                 <thead>

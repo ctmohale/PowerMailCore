@@ -3,11 +3,18 @@
 @section('title', 'Email Log | PowerMail Core')
 
 @section('content')
-    <h1>Email Log #{{ $log->id }}</h1>
+    <div class="page-header">
+        <div class="page-title">
+            <p class="eyebrow">Audit Detail</p>
+            <h1>Email Log #{{ $log->id }}</h1>
+            <p class="lede">{{ $log->subject ?: 'No subject' }}</p>
+        </div>
+        <a class="button secondary" href="{{ route('email-logs.index') }}">Back to Logs</a>
+    </div>
 
     <section class="panel">
         <div class="table-wrap">
-            <table>
+            <table class="detail-table">
                 <tbody>
                     <tr><th>Status</th><td><span class="badge {{ $log->status }}">{{ $log->status }}</span></td></tr>
                     <tr><th>Client</th><td>{{ $log->client?->name }}</td></tr>
@@ -28,9 +35,12 @@
     </section>
 
     <section class="panel">
-        <h2>Payload</h2>
+        <div class="panel-header">
+            <div>
+                <h2>Payload</h2>
+                <p>Stored request data.</p>
+            </div>
+        </div>
         <pre>{{ json_encode($log->payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
     </section>
-
-    <a class="button secondary" href="{{ route('email-logs.index') }}">Back to Logs</a>
 @endsection

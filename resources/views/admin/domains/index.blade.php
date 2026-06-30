@@ -3,10 +3,21 @@
 @section('title', 'Domains | PowerMail Core')
 
 @section('content')
-    <h1>Domains</h1>
+    <div class="page-header">
+        <div class="page-title">
+            <p class="eyebrow">Identity</p>
+            <h1>Domains</h1>
+            <p class="lede">Domain identity overview.</p>
+        </div>
+    </div>
 
     <section class="panel">
-        <h2>Add Domain</h2>
+        <div class="panel-header">
+            <div>
+                <h2>Add Domain</h2>
+                <p>Domain profile.</p>
+            </div>
+        </div>
         <form method="POST" action="{{ route('domains.store') }}">
             @csrf
             <div class="form-grid three">
@@ -38,7 +49,12 @@
     </section>
 
     <section class="panel">
-        <h2>Domain List</h2>
+        <div class="panel-header">
+            <div>
+                <h2>Domain List</h2>
+                <p>{{ $domains->count() }} domain{{ $domains->count() === 1 ? '' : 's' }} registered.</p>
+            </div>
+        </div>
         <div class="table-wrap">
             <table>
                 <thead>

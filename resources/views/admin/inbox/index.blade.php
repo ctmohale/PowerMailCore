@@ -3,7 +3,13 @@
 @section('title', 'Inbox | PowerMail Core')
 
 @section('content')
-    <h1>Inbox</h1>
+    <div class="page-header">
+        <div class="page-title">
+            <p class="eyebrow">Inbound</p>
+            <h1>Inbox</h1>
+            <p class="lede">Inbound message overview.</p>
+        </div>
+    </div>
 
     @unless ($imapEnabled)
         <div class="notice">
@@ -12,7 +18,12 @@
     @endunless
 
     <section class="panel">
-        <h2>Sync Inbox</h2>
+        <div class="panel-header">
+            <div>
+                <h2>Sync Inbox</h2>
+                <p>{{ $accounts->count() }} connected inbox account{{ $accounts->count() === 1 ? '' : 's' }}.</p>
+            </div>
+        </div>
         <div class="form-grid">
             <form method="POST" action="{{ route('inbox.sync') }}">
                 @csrf
@@ -49,7 +60,12 @@
     </section>
 
     <section class="panel">
-        <h2>Filter Messages</h2>
+        <div class="panel-header">
+            <div>
+                <h2>Filters</h2>
+                <p>Current filter set.</p>
+            </div>
+        </div>
         <form method="GET" action="{{ route('inbox.index') }}">
             <div class="form-grid three">
                 <div class="field">
@@ -79,7 +95,12 @@
     </section>
 
     <section class="panel">
-        <h2>Received Emails</h2>
+        <div class="panel-header">
+            <div>
+                <h2>Received Emails</h2>
+                <p>{{ $messages->total() }} message{{ $messages->total() === 1 ? '' : 's' }} found.</p>
+            </div>
+        </div>
         <div class="table-wrap">
             <table>
                 <thead>

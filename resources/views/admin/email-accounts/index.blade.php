@@ -3,10 +3,21 @@
 @section('title', 'Email Accounts | PowerMail Core')
 
 @section('content')
-    <h1>Email Accounts</h1>
+    <div class="page-header">
+        <div class="page-title">
+            <p class="eyebrow">Delivery</p>
+            <h1>Email Accounts</h1>
+            <p class="lede">Sender and inbox account overview.</p>
+        </div>
+    </div>
 
     <section class="panel">
-        <h2>Add SMTP Email Account</h2>
+        <div class="panel-header">
+            <div>
+                <h2>Add SMTP Email Account</h2>
+                <p>Sender credentials and mailbox settings.</p>
+            </div>
+        </div>
         <form method="POST" action="{{ route('email-accounts.store') }}">
             @csrf
             <div class="form-grid three">
@@ -102,7 +113,12 @@
     </section>
 
     <section class="panel">
-        <h2>Account List</h2>
+        <div class="panel-header">
+            <div>
+                <h2>Account List</h2>
+                <p>{{ $accounts->count() }} account{{ $accounts->count() === 1 ? '' : 's' }} configured.</p>
+            </div>
+        </div>
         <div class="table-wrap">
             <table>
                 <thead>
@@ -140,9 +156,14 @@
     </section>
 
     <section class="panel">
-        <h2>Inbox Settings</h2>
+        <div class="panel-header">
+            <div>
+                <h2>Inbox Settings</h2>
+                <p>IMAP access by sender account.</p>
+            </div>
+        </div>
         @forelse ($accounts as $account)
-            <form method="POST" action="{{ route('email-accounts.inbox.update', $account) }}" style="border-top: 1px solid var(--line); padding-top: 16px; margin-top: 16px;">
+            <form class="subform" method="POST" action="{{ route('email-accounts.inbox.update', $account) }}">
                 @csrf
                 @method('PATCH')
                 <strong>{{ $account->email }}</strong>

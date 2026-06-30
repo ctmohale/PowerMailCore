@@ -3,10 +3,21 @@
 @section('title', 'Email Logs | PowerMail Core')
 
 @section('content')
-    <h1>Email Logs</h1>
+    <div class="page-header">
+        <div class="page-title">
+            <p class="eyebrow">Audit</p>
+            <h1>Email Logs</h1>
+            <p class="lede">Delivery audit trail.</p>
+        </div>
+    </div>
 
     <section class="panel">
-        <h2>Filter Logs</h2>
+        <div class="panel-header">
+            <div>
+                <h2>Filters</h2>
+                <p>Current filter set.</p>
+            </div>
+        </div>
         <form method="GET" action="{{ route('email-logs.index') }}">
             <div class="form-grid three">
                 <div class="field">
@@ -36,7 +47,12 @@
     </section>
 
     <section class="panel">
-        <h2>Log List</h2>
+        <div class="panel-header">
+            <div>
+                <h2>Log List</h2>
+                <p>{{ $logs->total() }} log{{ $logs->total() === 1 ? '' : 's' }} found.</p>
+            </div>
+        </div>
         <div class="table-wrap">
             <table>
                 <thead>

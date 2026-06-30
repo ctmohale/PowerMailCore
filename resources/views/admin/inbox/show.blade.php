@@ -3,11 +3,18 @@
 @section('title', 'Inbox Message | PowerMail Core')
 
 @section('content')
-    <h1>Inbox Message #{{ $message->id }}</h1>
+    <div class="page-header">
+        <div class="page-title">
+            <p class="eyebrow">Inbound Detail</p>
+            <h1>Inbox Message #{{ $message->id }}</h1>
+            <p class="lede">{{ $message->subject ?: '(no subject)' }}</p>
+        </div>
+        <a class="button secondary" href="{{ route('inbox.index') }}">Back to Inbox</a>
+    </div>
 
     <section class="panel">
         <div class="table-wrap">
-            <table>
+            <table class="detail-table">
                 <tbody>
                     <tr><th>Client</th><td>{{ $message->client?->name }}</td></tr>
                     <tr><th>Inbox</th><td>{{ $message->emailAccount?->email }}</td></tr>
@@ -24,12 +31,17 @@
     </section>
 
     <section class="panel">
-        <h2>Message</h2>
+        <div class="panel-header">
+            <div>
+                <h2>Message</h2>
+                <p>{{ $message->from_email ?: 'Unknown sender' }}</p>
+            </div>
+        </div>
         @if ($message->body_html)
             <iframe
                 title="Email body"
                 sandbox
-                style="background: #fff; border: 1px solid var(--line); border-radius: 8px; min-height: 420px; width: 100%;"
+                class="message-frame"
                 srcdoc="{{ $message->body_html }}"
             ></iframe>
         @else
@@ -40,9 +52,12 @@
     </section>
 
     <section class="panel">
-        <h2>Headers</h2>
+        <div class="panel-header">
+            <div>
+                <h2>Headers</h2>
+                <p>Raw message metadata.</p>
+            </div>
+        </div>
         <pre>{{ $message->raw_headers ?: 'No headers stored.' }}</pre>
     </section>
-
-    <a class="button secondary" href="{{ route('inbox.index') }}">Back to Inbox</a>
 @endsection

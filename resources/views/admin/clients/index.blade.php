@@ -3,10 +3,21 @@
 @section('title', 'Clients | PowerMail Core')
 
 @section('content')
-    <h1>Clients</h1>
+    <div class="page-header">
+        <div class="page-title">
+            <p class="eyebrow">Workspace</p>
+            <h1>Clients</h1>
+            <p class="lede">Client workspace overview.</p>
+        </div>
+    </div>
 
     <section class="panel">
-        <h2>Add Client</h2>
+        <div class="panel-header">
+            <div>
+                <h2>Add Client</h2>
+                <p>New client profile.</p>
+            </div>
+        </div>
         <form method="POST" action="{{ route('clients.store') }}">
             @csrf
             <div class="form-grid">
@@ -26,7 +37,12 @@
     </section>
 
     <section class="panel">
-        <h2>Client List</h2>
+        <div class="panel-header">
+            <div>
+                <h2>Client List</h2>
+                <p>{{ $clients->count() }} client{{ $clients->count() === 1 ? '' : 's' }} configured.</p>
+            </div>
+        </div>
         <div class="table-wrap">
             <table>
                 <thead>

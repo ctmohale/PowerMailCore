@@ -8,10 +8,21 @@
         $defaultTextBody = "Hello {{ name }},\n\nWelcome to PowerMail Core.";
     @endphp
 
-    <h1>Templates</h1>
+    <div class="page-header">
+        <div class="page-title">
+            <p class="eyebrow">Content</p>
+            <h1>Templates</h1>
+            <p class="lede">Template library.</p>
+        </div>
+    </div>
 
     <section class="panel">
-        <h2>Create Template</h2>
+        <div class="panel-header">
+            <div>
+                <h2>Create Template</h2>
+                <p>HTML and text bodies.</p>
+            </div>
+        </div>
         <form method="POST" action="{{ route('email-templates.store') }}">
             @csrf
             <div class="form-grid">
@@ -57,7 +68,12 @@
     </section>
 
     <section class="panel">
-        <h2>Template List</h2>
+        <div class="panel-header">
+            <div>
+                <h2>Template List</h2>
+                <p>{{ $templates->count() }} template{{ $templates->count() === 1 ? '' : 's' }} available.</p>
+            </div>
+        </div>
         <div class="table-wrap">
             <table>
                 <thead>
