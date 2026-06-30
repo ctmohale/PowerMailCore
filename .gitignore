@@ -1,11 +1,10 @@
 *.log
 *.zip
 .DS_Store
-README [0-9]*.md
+README 2.md
 .env
 .env.backup
 .env.production
-config.php
 .phpactor.json
 .phpunit.result.cache
 /.codex
@@ -21,10 +20,6 @@ config.php
 /public/fonts-manifest.dev.json
 /public/hot
 /public/storage
-/storage/cache/*
-!/storage/cache/.gitignore
-/storage/logs/*
-!/storage/logs/.gitignore
 /storage/*.key
 /storage/pail
 /vendor

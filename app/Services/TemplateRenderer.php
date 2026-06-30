@@ -1,39 +1,46 @@
 <?php
 
-declare(strict_types=1);
-
 namespace App\Services;
+
+use DateTimeInterface;
+use Illuminate\Support\Arr;
 
 class TemplateRenderer
 {
+    /**
+     * Replace {{ keys }} with values from the provided data array.
+     */
     public function render(string $content, array $data, bool $escapeHtml = false): string
     {
-        $flat = $this->dot($data);
+        $flatData = Arr::dot($data);
 
-        return preg_replace_callback('/{{\s*([A-Za-z0-9_.-]+)\s*}}/', function (array $matches) use ($flat, $escapeHtml): string {
-            $value = $flat[$matches[1]] ?? '';
-            $value = is_scalar($value) || $value === null
-                ? (string) $value
-                : json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        return preg_replace_callback('/{{\s*([A-Za-z0-9_.-]+)\s*}}/', function (array $matches) use ($flatData, $escapeHtml): string {
+            $key = $matches[1];
+
+            if (! array_key_exists($key, $flatData)) {
+                return '';
+            }
+
+            $value = $this->stringify($flatData[$key]);
 
             return $escapeHtml ? e($value) : $value;
         }, $content) ?? $content;
     }
 
-    private function dot(array $data, string $prefix = ''): array
+    private function stringify(mixed $value): string
     {
-        $flat = [];
-
-        foreach ($data as $key => $value) {
-            $newKey = $prefix === '' ? (string) $key : $prefix.'.'.$key;
-
-            if (is_array($value)) {
-                $flat += $this->dot($value, $newKey);
-            } else {
-                $flat[$newKey] = $value;
-            }
+        if ($value instanceof DateTimeInterface) {
+            return $value->format('Y-m-d H:i:s');
         }
 
-        return $flat;
+        if (is_bool($value)) {
+            return $value ? 'true' : 'false';
+        }
+
+        if (is_scalar($value) || $value === null) {
+            return (string) $value;
+        }
+
+        return json_encode($value, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?: '';
     }
 }

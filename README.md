@@ -1,67 +1,78 @@
 # PowerMail Core
 
-PowerMail Core is now a plain PHP + MySQL app for simple cPanel hosting. It has one admin dashboard and one REST API endpoint for sending template emails through connected SMTP accounts.
+PowerMail Core is a Laravel email core for multiple client apps and websites. It has one admin dashboard and one REST API for sending templated emails through configured SMTP accounts.
 
-## Structure
+## MVP Modules
 
-- `index.php` - front controller
-- `.htaccess` - routes requests and blocks private files
-- `app/` - core PHP classes, controllers, services, routes
-- `views/` - admin screens
-- `assets/` - CSS and public assets
-- `storage/` - logs/cache only
-- `config.example.php` - copy to `config.php` on the server
-- `install.sql` - MySQL tables and starter data
+- Clients
+- Domains
+- SMTP email accounts
+- Inbox access for received emails
+- Email templates
+- API keys
+- Email logs
 
-## cPanel Install
+## Local Setup
 
-1. Create a MySQL database and database user in cPanel.
-2. Open phpMyAdmin and import `install.sql`.
-3. Copy `config.example.php` to `config.php`.
-4. Update `config.php` with your app URL and MySQL details.
-5. Point your domain or subdomain document root to this project folder.
-6. Enable these PHP extensions in cPanel: `pdo_mysql`, `openssl`, `mbstring`, and `imap` if you want inbox sync.
-7. Visit `/login`.
+```bash
+composer install
+cp .env.example .env
+php artisan key:generate
+php artisan migrate --seed
+php artisan serve
+```
 
-Default login after importing `install.sql`:
+Default seeded login:
 
 ```text
-Email: admin@powermail.local
+Email: admin@powermailcore.test
 Password: password
 ```
 
-Change that password before using the app for real.
+Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` before seeding on a hosted environment.
 
-## Git Deployment
+## cPanel Notes
 
-For the easiest continuous deployment on cPanel, clone this repository directly into the folder used as the domain or subdomain document root. Then every cPanel Git pull updates the live PHP files without Composer, NPM, or Laravel build steps.
+Use MySQL in `.env`:
 
-Recommended cPanel shape:
+```env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=your_cpanel_database
+DB_USERNAME=your_cpanel_user
+DB_PASSWORD=your_cpanel_password
+```
+
+Point the domain or subdomain document root to Laravel's `public` directory. After uploading, run:
+
+```bash
+composer install --no-dev --optimize-autoloader
+php artisan key:generate
+php artisan migrate --force
+php artisan db:seed --force
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+```
+
+For inbox syncing, enable the PHP `imap` extension in cPanel's PHP extension selector. Typical cPanel mailbox settings are:
 
 ```text
-/home/beestac1/repositories/PowerMailCore
+IMAP host: mail.yourdomain.co.za
+IMAP port: 993
+IMAP encryption: SSL
+Username: full email address
+Password: mailbox password
 ```
 
-Then set a subdomain document root to:
+## Send Email API
 
-```text
-/home/beestac1/repositories/PowerMailCore
-```
-
-Use a subdomain like `mailcore.yourdomain.co.za` instead of a subfolder, because the app uses root paths such as `/assets/css/app.css`.
-
-## REST API
-
-Create an API key inside the dashboard, then call:
-
-```http
-POST /api/send
-Content-Type: application/json
-```
+`POST /api/send`
 
 ```json
 {
-  "api_key": "pmc_your_key",
+  "api_key": "APP_API_KEY",
   "from_email": "info@beestack.co.za",
   "to": "client@gmail.com",
   "subject": "Welcome to BeeStack",
@@ -72,4 +83,14 @@ Content-Type: application/json
 }
 ```
 
-The API key, sending account, and template must belong to the same client.
+Successful response:
+
+```json
+{
+  "message": "Email sent.",
+  "log_id": 1,
+  "status": "sent"
+}
+```
+
+API keys are stored as SHA-256 hashes. SMTP passwords are stored using Laravel's encrypted cast.
