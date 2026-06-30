@@ -10,6 +10,7 @@ use App\Models\EmailAccount;
 use App\Models\EmailLog;
 use App\Models\EmailTemplate;
 use App\Models\ReceivedEmail;
+use Illuminate\Support\Carbon;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
@@ -44,6 +45,16 @@ class DashboardController extends Controller
                 ->latest()
                 ->limit(8)
                 ->get(),
+            'deliveryTrend' => collect(range(6, 0))->map(function (int $daysAgo): array {
+                $date = Carbon::today()->subDays($daysAgo);
+
+                return [
+                    'label' => $date->format('M j'),
+                    'sent' => EmailLog::where('status', EmailLog::STATUS_SENT)->whereDate('created_at', $date)->count(),
+                    'failed' => EmailLog::where('status', EmailLog::STATUS_FAILED)->whereDate('created_at', $date)->count(),
+                    'received' => ReceivedEmail::whereDate('created_at', $date)->count(),
+                ];
+            }),
         ]);
     }
 }
