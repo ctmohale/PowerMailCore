@@ -16,6 +16,7 @@ class ClientController extends Controller
         return view('admin.clients.index', [
             'clients' => Client::query()
                 ->withCount(['domains', 'emailAccounts', 'emailTemplates', 'apiKeys'])
+                ->withCount('users')
                 ->latest()
                 ->get(),
         ]);
@@ -26,25 +27,70 @@ class ClientController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'contact_email' => ['nullable', 'email:rfc', 'max:255'],
+            'is_active' => ['nullable', 'boolean'],
         ]);
 
         Client::create([
             'name' => $validated['name'],
             'slug' => $this->uniqueSlug($validated['name']),
             'contact_email' => $validated['contact_email'] ?? null,
-            'is_active' => true,
+            'is_active' => $request->boolean('is_active', true),
         ]);
 
         return back()->with('success', 'Client added.');
     }
 
-    private function uniqueSlug(string $name): string
+    public function update(Request $request, Client $client): RedirectResponse
+    {
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'contact_email' => ['nullable', 'email:rfc', 'max:255'],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+
+        $client->fill([
+            'name' => $validated['name'],
+            'contact_email' => $validated['contact_email'] ?? null,
+            'is_active' => $request->boolean('is_active'),
+        ]);
+
+        if ($client->isDirty('name')) {
+            $client->slug = $this->uniqueSlug($validated['name'], $client->id);
+        }
+
+        $client->save();
+
+        return back()->with('success', 'Client updated.');
+    }
+
+    public function suspend(Client $client): RedirectResponse
+    {
+        $client->forceFill(['is_active' => false])->save();
+
+        return back()->with('success', 'Client suspended. Its users cannot access the workspace.');
+    }
+
+    public function activate(Client $client): RedirectResponse
+    {
+        $client->forceFill(['is_active' => true])->save();
+
+        return back()->with('success', 'Client activated.');
+    }
+
+    public function destroy(Client $client): RedirectResponse
+    {
+        $client->delete();
+
+        return back()->with('success', 'Client deleted.');
+    }
+
+    private function uniqueSlug(string $name, ?int $ignoreClientId = null): string
     {
         $base = Str::slug($name) ?: 'client';
         $slug = $base;
         $count = 2;
 
-        while (Client::where('slug', $slug)->exists()) {
+        while (Client::where('slug', $slug)->when($ignoreClientId, fn ($query) => $query->whereKeyNot($ignoreClientId))->exists()) {
             $slug = $base.'-'.$count;
             $count++;
         }

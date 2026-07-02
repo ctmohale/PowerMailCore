@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Exceptions\EmailSendException;
+use App\Http\Controllers\Api\Concerns\AuthenticatesApiKey;
 use App\Http\Controllers\Controller;
 use App\Models\ApiKey;
 use App\Services\SendEmailService;
@@ -11,10 +12,12 @@ use Illuminate\Http\Request;
 
 class SendEmailController extends Controller
 {
+    use AuthenticatesApiKey;
+
     public function __invoke(Request $request, SendEmailService $sender): JsonResponse
     {
         $validated = $request->validate([
-            'api_key' => ['required', 'string'],
+            'api_key' => ['nullable', 'string'],
             'from_email' => ['required', 'email:rfc'],
             'to' => ['required', 'email:rfc'],
             'subject' => ['nullable', 'string', 'max:255'],
@@ -22,13 +25,7 @@ class SendEmailController extends Controller
             'data' => ['sometimes', 'array'],
         ]);
 
-        $apiKey = ApiKey::findActiveByPlainTextKey($validated['api_key']);
-
-        if (! $apiKey) {
-            return response()->json([
-                'message' => 'Invalid API key.',
-            ], 401);
-        }
+        $apiKey = $this->authorizeApiKey($request, ApiKey::ABILITY_SEND);
 
         try {
             $log = $sender->send($apiKey, $validated);

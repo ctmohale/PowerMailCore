@@ -40,6 +40,36 @@ class DomainController extends Controller
         return back()->with('success', 'Domain added.');
     }
 
+    public function update(Request $request, Domain $domain): RedirectResponse
+    {
+        $request->merge([
+            'domain' => $this->normalizeDomain((string) $request->input('domain')),
+        ]);
+
+        $validated = $request->validate([
+            'client_id' => ['required', 'exists:clients,id'],
+            'domain' => [
+                'required',
+                'string',
+                'max:255',
+                'regex:/^[a-z0-9.-]+\.[a-z]{2,}$/',
+                Rule::unique('domains', 'domain')->ignore($domain),
+            ],
+            'status' => ['required', Rule::in([Domain::STATUS_ACTIVE, Domain::STATUS_PENDING])],
+        ]);
+
+        $domain->update($validated);
+
+        return back()->with('success', 'Domain updated.');
+    }
+
+    public function destroy(Domain $domain): RedirectResponse
+    {
+        $domain->delete();
+
+        return back()->with('success', 'Domain deleted.');
+    }
+
     private function normalizeDomain(string $domain): string
     {
         $domain = strtolower(trim($domain));

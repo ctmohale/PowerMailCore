@@ -7,6 +7,16 @@
         <p class="eyebrow">PowerMail Core</p>
         <h1>Login</h1>
         <p class="lede" style="margin-bottom: 18px;">Admin dashboard access.</p>
+        @if ($errors->any())
+            <div class="alert error">
+                <strong>Check the form.</strong>
+                <ul>
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
         <form method="POST" action="{{ route('login.store') }}">
             @csrf
             <div class="field">

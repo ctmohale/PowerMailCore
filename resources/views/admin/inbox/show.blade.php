@@ -3,40 +3,64 @@
 @section('title', 'Inbox Message | PowerMail Core')
 
 @section('content')
+    @php
+        $subject = $message->subject ?: '(no subject)';
+        $senderName = $message->from_name ?: $message->from_email ?: 'Unknown sender';
+        $senderEmail = $message->from_email;
+        $senderInitial = strtoupper(substr(trim($senderName), 0, 1)) ?: '?';
+        $replySubject = str_starts_with(strtolower($subject), 're:') ? $subject : 'Re: '.$subject;
+        $replyData = json_encode([
+            'name' => $senderName,
+            'original_subject' => $subject,
+        ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    @endphp
+
     <div class="page-header">
         <div class="page-title">
             <p class="eyebrow">Inbound Detail</p>
-            <h1>Inbox Message #{{ $message->id }}</h1>
-            <p class="lede">{{ $message->subject ?: '(no subject)' }}</p>
+            <h1>{{ $subject }}</h1>
+            <p class="lede">Opened from {{ $message->emailAccount?->email ?: 'linked inbox' }}</p>
         </div>
-        <a class="button secondary" href="{{ route('inbox.index') }}">Back to Inbox</a>
+        <div class="inline-actions">
+            @if ($canSendEmails && $senderEmail)
+                <button
+                    type="button"
+                    data-open-dialog="compose-email-dialog"
+                    data-compose-to="{{ $senderEmail }}"
+                    data-compose-subject="{{ $replySubject }}"
+                    data-compose-data="{{ $replyData }}"
+                >Reply</button>
+            @endif
+            <a class="button secondary" href="{{ route('inbox.index') }}">Back to Inbox</a>
+        </div>
     </div>
 
-    <section class="panel">
-        <div class="table-wrap">
-            <table class="detail-table">
-                <tbody>
-                    <tr><th>Client</th><td>{{ $message->client?->name }}</td></tr>
-                    <tr><th>Inbox</th><td>{{ $message->emailAccount?->email }}</td></tr>
-                    <tr><th>From</th><td>{{ $message->from_name ? $message->from_name.' <'.$message->from_email.'>' : $message->from_email }}</td></tr>
-                    <tr><th>To</th><td>{{ $message->to_email }}</td></tr>
-                    <tr><th>Subject</th><td class="wrap">{{ $message->subject ?: '(no subject)' }}</td></tr>
-                    <tr><th>Received</th><td>{{ $message->received_at?->format('Y-m-d H:i:s') ?: '-' }}</td></tr>
-                    <tr><th>Message ID</th><td>{{ $message->message_id ?: '-' }}</td></tr>
-                    <tr><th>UID</th><td>{{ $message->uid }}</td></tr>
-                    <tr><th>Size</th><td>{{ number_format($message->size / 1024, 1) }} KB</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </section>
-
-    <section class="panel">
-        <div class="panel-header">
-            <div>
-                <h2>Message</h2>
-                <p>{{ $message->from_email ?: 'Unknown sender' }}</p>
+    <section class="panel email-reader">
+        <div class="email-reader-header">
+            <div class="sender-avatar">{{ $senderInitial }}</div>
+            <div class="sender-summary">
+                <div class="sender-line">
+                    <strong>{{ $senderName }}</strong>
+                    @if ($senderEmail && $senderEmail !== $senderName)
+                        <span>&lt;{{ $senderEmail }}&gt;</span>
+                    @endif
+                </div>
+                <div class="recipient-line">
+                    @if ($message->to_email)
+                        <span>to {{ $message->to_email }}</span>
+                    @endif
+                    @if ($message->emailAccount?->email)
+                        <span>{{ $message->emailAccount->email }}</span>
+                    @endif
+                </div>
             </div>
+            @if ($message->received_at)
+                <time class="email-received" datetime="{{ $message->received_at->toIso8601String() }}">
+                    {{ $message->received_at->format('Y-m-d H:i') }}
+                </time>
+            @endif
         </div>
+
         @if ($message->body_html)
             <iframe
                 title="Email body"
@@ -51,13 +75,12 @@
         @endif
     </section>
 
-    <section class="panel">
-        <div class="panel-header">
-            <div>
-                <h2>Headers</h2>
-                <p>Raw message metadata.</p>
-            </div>
-        </div>
-        <pre>{{ $message->raw_headers ?: 'No headers stored.' }}</pre>
-    </section>
+    @include('admin.inbox.partials.compose-dialog', [
+        'composeContext' => 'inbox-detail',
+        'composeTitle' => 'Reply to Email',
+        'composeDescription' => 'Send a reply to this sender.',
+        'composeTo' => $senderEmail,
+        'composeSubject' => $replySubject,
+        'composeDataJson' => $replyData,
+    ])
 @endsection

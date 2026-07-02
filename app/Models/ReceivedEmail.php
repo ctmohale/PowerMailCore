@@ -14,6 +14,10 @@ class ReceivedEmail extends Model
         'client_id',
         'domain_id',
         'email_account_id',
+        'email_log_id',
+        'mailbox',
+        'mailbox_type',
+        'source',
         'uid',
         'message_id',
         'from_name',
@@ -25,8 +29,14 @@ class ReceivedEmail extends Model
         'raw_headers',
         'size',
         'seen',
+        'opened_at',
         'received_at',
         'fetched_at',
+    ];
+
+    protected $attributes = [
+        'opened_at' => null,
+        'source' => 'imap',
     ];
 
     protected function casts(): array
@@ -35,6 +45,7 @@ class ReceivedEmail extends Model
             'uid' => 'integer',
             'size' => 'integer',
             'seen' => 'boolean',
+            'opened_at' => 'datetime',
             'received_at' => 'datetime',
             'fetched_at' => 'datetime',
         ];
@@ -53,5 +64,10 @@ class ReceivedEmail extends Model
     public function emailAccount(): BelongsTo
     {
         return $this->belongsTo(EmailAccount::class);
+    }
+
+    public function emailLog(): BelongsTo
+    {
+        return $this->belongsTo(EmailLog::class);
     }
 }

@@ -26,6 +26,7 @@ class EmailLog extends Model
         'email_account_id',
         'api_key_id',
         'email_template_id',
+        'marketing_contact_id',
         'from_email',
         'to_email',
         'subject',
@@ -71,5 +72,10 @@ class EmailLog extends Model
     public function emailTemplate(): BelongsTo
     {
         return $this->belongsTo(EmailTemplate::class);
+    }
+
+    public function marketingContact(): BelongsTo
+    {
+        return $this->belongsTo(MarketingContact::class);
     }
 }

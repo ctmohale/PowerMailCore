@@ -21,6 +21,17 @@
                     <tr><th>Domain</th><td>{{ $log->domain?->domain ?: '-' }}</td></tr>
                     <tr><th>API Key</th><td>{{ $log->apiKey?->name ?: '-' }}</td></tr>
                     <tr><th>Template</th><td>{{ $log->emailTemplate?->name ?: '-' }}</td></tr>
+                    <tr>
+                        <th>Marketing Contact</th>
+                        <td>
+                            @if ($log->marketingContact)
+                                {{ $log->marketingContact->company ?: $log->marketingContact->name ?: $log->marketingContact->email }}
+                                <span class="muted">({{ $log->marketingContact->email }})</span>
+                            @else
+                                -
+                            @endif
+                        </td>
+                    </tr>
                     <tr><th>From</th><td>{{ $log->from_email }}</td></tr>
                     <tr><th>To</th><td>{{ $log->to_email }}</td></tr>
                     <tr><th>Subject</th><td class="wrap">{{ $log->subject ?: '-' }}</td></tr>
@@ -33,6 +44,41 @@
             </table>
         </div>
     </section>
+
+    @if ($log->status === \App\Models\EmailLog::STATUS_SENT)
+        <section class="panel">
+            <div class="panel-header">
+                <div>
+                    <h2>Gmail Delivery Check</h2>
+                    <p>Use these values in cPanel Track Delivery to confirm what happened after SMTP accepted the message.</p>
+                </div>
+            </div>
+            <div class="delivery-check-grid">
+                <div>
+                    <span>From</span>
+                    <strong>{{ $log->from_email ?: '-' }}</strong>
+                </div>
+                <div>
+                    <span>To</span>
+                    <strong>{{ $log->to_email ?: '-' }}</strong>
+                </div>
+                <div>
+                    <span>Message ID</span>
+                    <strong class="wrap">{{ $log->provider_message_id ?: '-' }}</strong>
+                </div>
+                <div>
+                    <span>Accepted At</span>
+                    <strong>{{ $log->sent_at?->format('Y-m-d H:i:s') ?: '-' }}</strong>
+                </div>
+            </div>
+            <ol class="delivery-steps">
+                <li>Open cPanel, then Email > Track Delivery.</li>
+                <li>Search this recipient or Message ID.</li>
+                <li>If the result is rejected or deferred, use the Gmail response shown there as the real delivery error.</li>
+                <li>If the result is accepted by Google, check Gmail All Mail, filters, blocked senders, and Postmaster Tools reputation.</li>
+            </ol>
+        </section>
+    @endif
 
     <section class="panel">
         <div class="panel-header">

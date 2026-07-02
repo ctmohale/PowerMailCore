@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\EmailAccount;
+use Illuminate\Contracts\Encryption\DecryptException;
+use RuntimeException;
 use Symfony\Component\Mailer\Mailer;
 use Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport;
 use Symfony\Component\Mime\Address;
@@ -17,11 +19,15 @@ class SmtpMailer
         string $html,
         ?string $text = null,
     ): ?string {
+        $messageId = $this->messageIdFor($account);
+
         $email = (new Email)
             ->from(new Address($account->email, $account->from_name ?: $account->email))
             ->to($to)
             ->subject($subject)
             ->html($html);
+
+        $email->getHeaders()->addIdHeader('Message-ID', $messageId);
 
         if ($text !== null && $text !== '') {
             $email->text($text);
@@ -29,9 +35,18 @@ class SmtpMailer
 
         (new Mailer($this->transportFor($account)))->send($email);
 
-        $messageId = $email->getHeaders()->get('Message-ID');
+        return $email->getHeaders()->get('Message-ID')?->getBodyAsString();
+    }
 
-        return $messageId?->getBodyAsString();
+    public function verify(EmailAccount $account): void
+    {
+        $transport = $this->transportFor($account);
+
+        try {
+            $transport->start();
+        } finally {
+            $transport->stop();
+        }
     }
 
     protected function transportFor(EmailAccount $account): EsmtpTransport
@@ -55,8 +70,24 @@ class SmtpMailer
         }
 
         $transport->setUsername($account->smtp_username);
-        $transport->setPassword($account->smtp_password);
+        $transport->setPassword($this->smtpPasswordFor($account));
 
         return $transport;
+    }
+
+    private function smtpPasswordFor(EmailAccount $account): string
+    {
+        try {
+            return (string) $account->smtp_password;
+        } catch (DecryptException) {
+            throw new RuntimeException('The saved SMTP password could not be decrypted. Re-enter and save the SMTP password in Email Accounts.');
+        }
+    }
+
+    private function messageIdFor(EmailAccount $account): string
+    {
+        $domain = substr(strrchr($account->email, '@') ?: '@localhost', 1) ?: 'localhost';
+
+        return bin2hex(random_bytes(16)).'@'.$domain;
     }
 }

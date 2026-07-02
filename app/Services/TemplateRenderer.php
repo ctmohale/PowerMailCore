@@ -9,12 +9,15 @@ class TemplateRenderer
 {
     /**
      * Replace {{ keys }} with values from the provided data array.
+     *
+     * @param  array<int, string>  $rawKeys
      */
-    public function render(string $content, array $data, bool $escapeHtml = false): string
+    public function render(string $content, array $data, bool $escapeHtml = false, array $rawKeys = []): string
     {
         $flatData = Arr::dot($data);
+        $rawKeys = array_flip($rawKeys);
 
-        return preg_replace_callback('/{{\s*([A-Za-z0-9_.-]+)\s*}}/', function (array $matches) use ($flatData, $escapeHtml): string {
+        return preg_replace_callback('/{{\s*([A-Za-z0-9_.-]+)\s*}}/', function (array $matches) use ($flatData, $escapeHtml, $rawKeys): string {
             $key = $matches[1];
 
             if (! array_key_exists($key, $flatData)) {
@@ -23,7 +26,7 @@ class TemplateRenderer
 
             $value = $this->stringify($flatData[$key]);
 
-            return $escapeHtml ? e($value) : $value;
+            return $escapeHtml && ! isset($rawKeys[$key]) ? e($value) : $value;
         }, $content) ?? $content;
     }
 

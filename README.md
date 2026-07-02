@@ -66,24 +66,38 @@ Username: full email address
 Password: mailbox password
 ```
 
-## Send Email API
+## Integration API
+
+Create an API key in **API Keys** and enable the abilities your integration needs:
+
+- `send` sends templated emails and lists sending accounts.
+- `templates` lists active templates for the key's client.
+- `inbox` reads received emails for the key's client.
+
+Keep API keys on your server. Do not expose them in public browser JavaScript.
+
+Use bearer authentication:
+
+```bash
+Authorization: Bearer pmc_your_api_key
+```
+
+### Send Email
 
 `POST /api/send`
 
-```json
-{
-  "api_key": "APP_API_KEY",
-  "from_email": "info@beestack.co.za",
-  "to": "client@gmail.com",
-  "subject": "Welcome to BeeStack",
-  "template_key": "welcome",
-  "data": {
-    "name": "John"
-  }
-}
+```bash
+curl -X POST https://your-app.example.com/api/send \
+  -H "Authorization: Bearer pmc_your_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "from_email": "info@beestack.co.za",
+    "to": "client@gmail.com",
+    "subject": "Welcome to BeeStack",
+    "template_key": "welcome",
+    "data": { "name": "John" }
+  }'
 ```
-
-Successful response:
 
 ```json
 {
@@ -92,5 +106,42 @@ Successful response:
   "status": "sent"
 }
 ```
+
+### Templates
+
+```bash
+curl https://your-app.example.com/api/templates \
+  -H "Authorization: Bearer pmc_your_api_key"
+
+curl https://your-app.example.com/api/templates/welcome \
+  -H "Authorization: Bearer pmc_your_api_key"
+```
+
+### Sending Accounts
+
+```bash
+curl https://your-app.example.com/api/sending-accounts \
+  -H "Authorization: Bearer pmc_your_api_key"
+```
+
+Use one of the returned `email` values as `from_email` when calling `/api/send`.
+
+### Received Emails
+
+```bash
+curl "https://your-app.example.com/api/inbox?status=unopened&mailbox=inbox" \
+  -H "Authorization: Bearer pmc_your_api_key"
+
+curl https://your-app.example.com/api/inbox/123 \
+  -H "Authorization: Bearer pmc_your_api_key"
+
+curl -X PATCH https://your-app.example.com/api/inbox/123/opened \
+  -H "Authorization: Bearer pmc_your_api_key"
+```
+
+Supported inbox filters:
+
+- `status`: `all`, `opened`, `unopened`
+- `mailbox`: `inbox`, `spam`, `sent`, `drafts`, `trash`, `archive`
 
 API keys are stored as SHA-256 hashes. SMTP passwords are stored using Laravel's encrypted cast.

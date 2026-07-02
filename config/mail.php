@@ -115,4 +115,17 @@ return [
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Tracking URL
+    |--------------------------------------------------------------------------
+    |
+    | Open tracking pixels must use a URL that recipients' mail clients can
+    | reach. Set MAIL_TRACKING_URL to your public app URL or tunnel URL when
+    | APP_URL points at localhost during development.
+    |
+    */
+
+    'tracking_url' => env('MAIL_TRACKING_URL', env('APP_URL', 'http://localhost')),
+
 ];

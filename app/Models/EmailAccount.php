@@ -2,14 +2,21 @@
 
 namespace App\Models;
 
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class EmailAccount extends Model
 {
     use HasFactory;
+
+    private const ENCRYPTED_PASSWORD_ATTRIBUTES = [
+        'smtp_password',
+        'imap_password',
+    ];
 
     public const ENCRYPTION_NONE = 'none';
 
@@ -72,5 +79,63 @@ class EmailAccount extends Model
     public function receivedEmails(): HasMany
     {
         return $this->hasMany(ReceivedEmail::class);
+    }
+
+    public function users(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class)->withTimestamps();
+    }
+
+    public function hasSmtpPassword(): bool
+    {
+        return filled($this->getRawOriginal('smtp_password'));
+    }
+
+    public function hasUsableSmtpPassword(): bool
+    {
+        if (! $this->hasSmtpPassword()) {
+            return false;
+        }
+
+        try {
+            $this->getAttribute('smtp_password');
+        } catch (DecryptException) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public function hasImapPassword(): bool
+    {
+        return filled($this->getRawOriginal('imap_password'));
+    }
+
+    public function hasUsableImapPassword(): bool
+    {
+        if (! $this->hasImapPassword()) {
+            return false;
+        }
+
+        try {
+            $this->getAttribute('imap_password');
+        } catch (DecryptException) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public function originalIsEquivalent($key)
+    {
+        try {
+            return parent::originalIsEquivalent($key);
+        } catch (DecryptException $exception) {
+            if (in_array($key, self::ENCRYPTED_PASSWORD_ATTRIBUTES, true)) {
+                return false;
+            }
+
+            throw $exception;
+        }
     }
 }

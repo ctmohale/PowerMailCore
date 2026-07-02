@@ -4,6 +4,7 @@
 
 @section('content')
     @php
+        $dashboardUser = auth()->user();
         $processed = $counts['sent'] + $counts['failed'];
         $deliveryRate = $processed > 0 ? round(($counts['sent'] / $processed) * 100) : 0;
         $failureRate = $processed > 0 ? round(($counts['failed'] / $processed) * 100) : 0;
@@ -54,8 +55,14 @@
             <p class="lede">Monitor clients, delivery health, inbox intake, and API usage from a single workspace.</p>
         </div>
         <div class="actions">
-            <a class="button secondary" href="{{ route('email-logs.index') }}">View Logs</a>
-            <a class="button" href="{{ route('email-accounts.index') }}">Add Account</a>
+            @if ($dashboardUser->canAccess(\App\Models\User::PERMISSION_VIEW_LOGS))
+                <a class="button secondary" href="{{ route('email-logs.index') }}">View Logs</a>
+            @endif
+            @if ($dashboardUser->canAccess(\App\Models\User::PERMISSION_SEND_EMAILS))
+                <a class="button" href="{{ route('send-email.index') }}">Send Email</a>
+            @elseif ($dashboardUser->canAccess(\App\Models\User::PERMISSION_MANAGE_ACCOUNTS))
+                <a class="button" href="{{ route('email-accounts.index') }}">Add Account</a>
+            @endif
         </div>
     </div>
 
@@ -86,13 +93,13 @@
 
         <div class="metric" data-tone="green">
             <div class="metric-top">
-                <span class="metric-label">Clients</span>
+                <span class="metric-label">{{ $isAdmin ? 'Clients' : 'Company' }}</span>
                 <span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
             </div>
             <strong class="metric-value">{{ number_format($counts['clients']) }}</strong>
             <div class="metric-footer">
                 <span class="trend up">+{{ number_format($counts['domains']) }}</span>
-                <span class="metric-hint">domains</span>
+                <span class="metric-hint">{{ $isAdmin ? 'domains' : 'workspace' }}</span>
             </div>
         </div>
 
@@ -207,6 +214,7 @@
     </section>
 
     <section class="split-grid">
+        @if ($dashboardUser->canAccess(\App\Models\User::PERMISSION_VIEW_LOGS))
         <div class="panel">
             <div class="panel-header">
                 <div>
@@ -246,6 +254,7 @@
                 </table>
             </div>
         </div>
+        @endif
 
         <aside class="panel">
             <div class="panel-header">
@@ -255,14 +264,28 @@
                 </div>
             </div>
             <div class="quick-actions">
-                <a class="quick-link" href="{{ route('clients.index') }}"><span>Add client</span><span>Open</span></a>
-                <a class="quick-link" href="{{ route('domains.index') }}"><span>Add domain</span><span>Open</span></a>
-                <a class="quick-link" href="{{ route('email-templates.index') }}"><span>Create template</span><span>Open</span></a>
-                <a class="quick-link" href="{{ route('api-keys.index') }}"><span>Create API key</span><span>Open</span></a>
+                @if ($dashboardUser->canAccess(\App\Models\User::PERMISSION_SEND_EMAILS))
+                    <a class="quick-link" href="{{ route('send-email.index') }}"><span>Send email</span><span>Open</span></a>
+                @endif
+                @if ($dashboardUser->isAdmin())
+                    <a class="quick-link" href="{{ route('clients.index') }}"><span>Add client</span><span>Open</span></a>
+                    <a class="quick-link" href="{{ route('domains.index') }}"><span>Add domain</span><span>Open</span></a>
+                    <a class="quick-link" href="{{ route('api-keys.index') }}"><span>Create API key</span><span>Open</span></a>
+                @endif
+                @if ($dashboardUser->canAccess(\App\Models\User::PERMISSION_MANAGE_TEMPLATES))
+                    <a class="quick-link" href="{{ route('email-templates.index') }}"><span>Create template</span><span>Open</span></a>
+                @endif
+                @if ($dashboardUser->canAccess(\App\Models\User::PERMISSION_MANAGE_ACCOUNTS))
+                    <a class="quick-link" href="{{ route('email-accounts.index') }}"><span>Add account</span><span>Open</span></a>
+                @endif
+                @if ($dashboardUser->canAccess(\App\Models\User::PERMISSION_VIEW_INBOX))
+                    <a class="quick-link" href="{{ route('inbox.index') }}"><span>Open inbox</span><span>Open</span></a>
+                @endif
             </div>
         </aside>
     </section>
 
+    @if ($dashboardUser->canAccess(\App\Models\User::PERMISSION_VIEW_INBOX))
     <section class="panel">
         <div class="panel-header">
             <div>
@@ -300,4 +323,5 @@
             </table>
         </div>
     </section>
+    @endif
 @endsection

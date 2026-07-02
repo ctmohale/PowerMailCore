@@ -23,6 +23,9 @@ class DatabaseSeeder extends Seeder
             [
                 'name' => env('ADMIN_NAME', 'PowerMail Admin'),
                 'password' => env('ADMIN_PASSWORD', 'password'),
+                'role' => User::ROLE_ADMIN,
+                'status' => User::STATUS_ACTIVE,
+                'permissions' => array_fill_keys(array_keys(User::defaultClientPermissions()), true),
             ],
         );
 
@@ -53,8 +56,8 @@ class DatabaseSeeder extends Seeder
                 [
                     'name' => 'Welcome Email',
                     'subject' => 'Welcome to '.$client->name.', {{ name }}',
-                    'body_html' => '<p>Hello {{ name }},</p><p>Welcome to '.$client->name.'.</p>',
-                    'body_text' => "Hello {{ name }},\n\nWelcome to ".$client->name.'.',
+                    'body_html' => '<div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;padding:24px;"><h1>Hello {{ name }}</h1><div>{{ body }}</div><p style="color:#6b7280;font-size:12px;">'.$client->name.'</p></div>',
+                    'body_text' => "Hello {{ name }},\n\n{{ body }}\n\n".$client->name,
                     'is_active' => true,
                 ],
             );

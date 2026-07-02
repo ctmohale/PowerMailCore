@@ -14,6 +14,12 @@ class ApiKey extends Model
 
     public const TOKEN_PREFIX = 'pmc_';
 
+    public const ABILITY_SEND = 'send';
+
+    public const ABILITY_TEMPLATES = 'templates';
+
+    public const ABILITY_INBOX = 'inbox';
+
     protected $fillable = [
         'client_id',
         'name',
@@ -55,9 +61,27 @@ class ApiKey extends Model
     public static function findActiveByPlainTextKey(string $plainTextKey): ?self
     {
         return self::query()
+            ->whereHas('client', fn ($query) => $query->where('is_active', true))
             ->where('key_hash', self::hashKey($plainTextKey))
             ->where('is_active', true)
             ->first();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function abilityOptions(): array
+    {
+        return [
+            self::ABILITY_SEND => 'Send email',
+            self::ABILITY_TEMPLATES => 'Read templates',
+            self::ABILITY_INBOX => 'Read inbox',
+        ];
+    }
+
+    public function can(string $ability): bool
+    {
+        return in_array($ability, $this->abilities ?? [], true);
     }
 
     public function client(): BelongsTo

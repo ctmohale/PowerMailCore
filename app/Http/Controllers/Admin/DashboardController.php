@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Concerns\ScopesTenantData;
 use App\Http\Controllers\Controller;
 use App\Models\ApiKey;
 use App\Models\Client;
@@ -15,31 +16,34 @@ use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
+    use ScopesTenantData;
+
     public function __invoke(): View
     {
         return view('admin.dashboard', [
+            'isAdmin' => $this->isAdmin(),
             'counts' => [
-                'clients' => Client::count(),
-                'domains' => Domain::count(),
-                'accounts' => EmailAccount::count(),
-                'activeAccounts' => EmailAccount::where('is_active', true)->count(),
-                'inboxAccounts' => EmailAccount::where('inbox_enabled', true)->count(),
-                'templates' => EmailTemplate::count(),
-                'activeTemplates' => EmailTemplate::where('is_active', true)->count(),
-                'apiKeys' => ApiKey::count(),
-                'activeApiKeys' => ApiKey::where('is_active', true)->count(),
-                'logs' => EmailLog::count(),
-                'received' => ReceivedEmail::count(),
-                'sent' => EmailLog::where('status', EmailLog::STATUS_SENT)->count(),
-                'failed' => EmailLog::where('status', EmailLog::STATUS_FAILED)->count(),
-                'pending' => EmailLog::where('status', EmailLog::STATUS_PENDING)->count(),
+                'clients' => $this->isAdmin() ? Client::count() : (int) filled($this->currentClientId()),
+                'domains' => $this->scopeClient(Domain::query())->count(),
+                'accounts' => $this->scopeEmailAccounts(EmailAccount::query())->count(),
+                'activeAccounts' => $this->scopeEmailAccounts(EmailAccount::query())->where('is_active', true)->count(),
+                'inboxAccounts' => $this->scopeEmailAccounts(EmailAccount::query())->where('inbox_enabled', true)->count(),
+                'templates' => $this->scopeClient(EmailTemplate::query())->count(),
+                'activeTemplates' => $this->scopeClient(EmailTemplate::query())->where('is_active', true)->count(),
+                'apiKeys' => $this->scopeClient(ApiKey::query())->count(),
+                'activeApiKeys' => $this->scopeClient(ApiKey::query())->where('is_active', true)->count(),
+                'logs' => $this->scopeEmailAccountData(EmailLog::query())->count(),
+                'received' => $this->scopeEmailAccountData(ReceivedEmail::query())->count(),
+                'sent' => $this->scopeEmailAccountData(EmailLog::query())->where('status', EmailLog::STATUS_SENT)->count(),
+                'failed' => $this->scopeEmailAccountData(EmailLog::query())->where('status', EmailLog::STATUS_FAILED)->count(),
+                'pending' => $this->scopeEmailAccountData(EmailLog::query())->where('status', EmailLog::STATUS_PENDING)->count(),
             ],
-            'recentLogs' => EmailLog::query()
+            'recentLogs' => $this->scopeEmailAccountData(EmailLog::query())
                 ->with(['client', 'emailAccount', 'emailTemplate'])
                 ->latest()
                 ->limit(10)
                 ->get(),
-            'recentReceived' => ReceivedEmail::query()
+            'recentReceived' => $this->scopeEmailAccountData(ReceivedEmail::query())
                 ->with(['client', 'emailAccount'])
                 ->latest('received_at')
                 ->latest()
@@ -50,9 +54,9 @@ class DashboardController extends Controller
 
                 return [
                     'label' => $date->format('M j'),
-                    'sent' => EmailLog::where('status', EmailLog::STATUS_SENT)->whereDate('created_at', $date)->count(),
-                    'failed' => EmailLog::where('status', EmailLog::STATUS_FAILED)->whereDate('created_at', $date)->count(),
-                    'received' => ReceivedEmail::whereDate('created_at', $date)->count(),
+                    'sent' => $this->scopeEmailAccountData(EmailLog::query())->where('status', EmailLog::STATUS_SENT)->whereDate('created_at', $date)->count(),
+                    'failed' => $this->scopeEmailAccountData(EmailLog::query())->where('status', EmailLog::STATUS_FAILED)->whereDate('created_at', $date)->count(),
+                    'received' => $this->scopeEmailAccountData(ReceivedEmail::query())->whereDate('created_at', $date)->count(),
                 ];
             }),
         ]);

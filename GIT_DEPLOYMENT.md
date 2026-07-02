@@ -32,8 +32,19 @@ bash scripts/cpanel-deploy.sh
 ```
 
 That script installs dependencies when Composer is available, runs migrations, and refreshes Laravel caches.
+It also tries common cPanel PHP binaries and chooses one with the required CLI
+extensions before running Artisan.
 
 This option requires Composer on cPanel, unless you manually upload the `vendor` folder once before deploying.
+
+If the deployed site still fails, temporarily upload `scripts/deploy-check.php`
+to the domain's public web root as `deploy-check.php`, then open:
+
+```text
+https://mailcore.yourdomain.co.za/deploy-check.php
+```
+
+Delete `deploy-check.php` from the public web root after the checks pass.
 
 ## Option B: GitHub Actions Auto Deploy
 

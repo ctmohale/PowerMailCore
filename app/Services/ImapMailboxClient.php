@@ -4,10 +4,29 @@ namespace App\Services;
 
 use App\Models\EmailAccount;
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Encryption\DecryptException;
 use RuntimeException;
 
 class ImapMailboxClient
 {
+    public const MAILBOX_INBOX = 'inbox';
+
+    public const MAILBOX_SPAM = 'spam';
+
+    public const MAILBOX_SENT = 'sent';
+
+    public const MAILBOX_DRAFTS = 'drafts';
+
+    public const MAILBOX_TRASH = 'trash';
+
+    public const MAILBOX_ARCHIVE = 'archive';
+
+    private const CONNECTION_TIMEOUT_SECONDS = 10;
+
+    private const READ_TIMEOUT_SECONDS = 12;
+
+    private const MAX_FETCH_LIMIT = 50;
+
     /**
      * Fetch the newest inbox messages from an IMAP mailbox.
      *
@@ -15,30 +34,83 @@ class ImapMailboxClient
      */
     public function fetchLatest(EmailAccount $account, int $limit = 25): array
     {
-        if (! function_exists('imap_open')) {
-            throw new RuntimeException('The PHP IMAP extension is not enabled. Enable imap in cPanel PHP extensions to sync inbox mail.');
-        }
+        return $this->fetchLatestMailbox($account, self::MAILBOX_INBOX, $limit);
+    }
 
-        $connection = @imap_open(
-            $this->mailboxString($account),
-            (string) $account->imap_username,
-            (string) $account->imap_password,
-            OP_READONLY,
-            1,
+    /**
+     * Fetch the newest messages from a specific mailbox folder.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchLatestMailbox(EmailAccount $account, string $mailboxType, int $limit = 25): array
+    {
+        return $this->fetchMessages($account, $limit, mailboxType: $mailboxType);
+    }
+
+    /**
+     * Fetch messages older than an already-synced UID.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchBeforeUid(EmailAccount $account, int $beforeUid, int $limit = 25): array
+    {
+        return $this->fetchBeforeUidFromMailbox($account, self::MAILBOX_INBOX, $beforeUid, $limit);
+    }
+
+    /**
+     * Fetch older messages from a specific mailbox folder.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function fetchBeforeUidFromMailbox(EmailAccount $account, string $mailboxType, int $beforeUid, int $limit = 25): array
+    {
+        return $this->fetchMessages(
+            $account,
+            $limit,
+            fn (int $uid): bool => $uid < $beforeUid,
+            $mailboxType,
         );
+    }
 
-        if (! $connection) {
-            throw new RuntimeException($this->lastError('Could not connect to the IMAP inbox.'));
+    /**
+     * @param  null|callable(int): bool  $filter
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchMessages(EmailAccount $account, int $limit = 25, ?callable $filter = null, string $mailboxType = self::MAILBOX_INBOX): array
+    {
+        if (! function_exists('imap_open')) {
+            throw new RuntimeException('The PHP IMAP extension is not enabled for the PHP runtime serving this app.');
         }
+
+        $mailboxType = $this->normalizeMailboxType($mailboxType);
+        $limit = max(1, min($limit, self::MAX_FETCH_LIMIT));
+        $startedAt = microtime(true);
+        $syncBudgetSeconds = max(60, min(300, 30 + ($limit * 6)));
+
+        $this->configureTimeouts();
+        @set_time_limit($syncBudgetSeconds + 10);
+
+        [$connection, $mailbox] = $this->openMailbox($account, $mailboxType);
 
         try {
             $uids = imap_search($connection, 'ALL', SE_UID) ?: [];
             rsort($uids, SORT_NUMERIC);
 
+            if ($filter) {
+                $uids = array_values(array_filter(
+                    $uids,
+                    fn ($uid): bool => $filter((int) $uid),
+                ));
+            }
+
             $messages = [];
 
             foreach (array_slice($uids, 0, $limit) as $uid) {
-                $messages[] = $this->fetchMessage($connection, (int) $uid, $account);
+                if ((microtime(true) - $startedAt) > $syncBudgetSeconds) {
+                    throw new RuntimeException('Inbox sync timed out before all messages were fetched. Try a smaller fetch limit.');
+                }
+
+                $messages[] = $this->fetchMessage($connection, (int) $uid, $account, $mailbox, $mailboxType);
             }
 
             return $messages;
@@ -47,7 +119,66 @@ class ImapMailboxClient
         }
     }
 
-    private function mailboxString(EmailAccount $account): string
+    /**
+     * @return array{0: resource, 1: string}
+     */
+    private function openMailbox(EmailAccount $account, string $mailboxType): array
+    {
+        $lastError = null;
+        $password = $this->imapPasswordFor($account);
+
+        foreach ($this->mailboxCandidates($mailboxType) as $mailbox) {
+            $connection = @imap_open(
+                $this->mailboxString($account, $mailbox),
+                (string) $account->imap_username,
+                $password,
+                OP_READONLY,
+                1,
+            );
+
+            if ($connection) {
+                return [$connection, $mailbox];
+            }
+
+            $lastError = $this->lastError('');
+        }
+
+        throw new RuntimeException(trim('Could not connect to the '.$this->mailboxTypeLabel($mailboxType).' mailbox. '.$lastError));
+    }
+
+    private function imapPasswordFor(EmailAccount $account): string
+    {
+        try {
+            return (string) $account->imap_password;
+        } catch (DecryptException) {
+            throw new RuntimeException('The saved IMAP password could not be decrypted. Re-enter and save the IMAP password in Inbox Settings.');
+        }
+    }
+
+    private function configureTimeouts(): void
+    {
+        if (! function_exists('imap_timeout')) {
+            return;
+        }
+
+        if (defined('IMAP_OPENTIMEOUT')) {
+            imap_timeout(IMAP_OPENTIMEOUT, self::CONNECTION_TIMEOUT_SECONDS);
+        }
+
+        if (defined('IMAP_READTIMEOUT')) {
+            imap_timeout(IMAP_READTIMEOUT, self::READ_TIMEOUT_SECONDS);
+        }
+
+        if (defined('IMAP_WRITETIMEOUT')) {
+            imap_timeout(IMAP_WRITETIMEOUT, self::READ_TIMEOUT_SECONDS);
+        }
+
+        if (defined('IMAP_CLOSETIMEOUT')) {
+            imap_timeout(IMAP_CLOSETIMEOUT, self::CONNECTION_TIMEOUT_SECONDS);
+        }
+    }
+
+    private function mailboxString(EmailAccount $account, string $mailbox = 'INBOX'): string
     {
         $host = trim((string) $account->imap_host);
         $port = (int) ($account->imap_port ?: 993);
@@ -59,17 +190,23 @@ class ImapMailboxClient
             default => '/imap/ssl',
         };
 
-        return sprintf('{%s:%d%s}INBOX', $host, $port, $flags);
+        return sprintf('{%s:%d%s}%s', $host, $port, $flags, $this->encodeMailboxName($mailbox));
     }
 
     /**
      * @param  resource  $connection
      * @return array<string, mixed>
      */
-    private function fetchMessage($connection, int $uid, EmailAccount $account): array
+    private function fetchMessage($connection, int $uid, EmailAccount $account, string $mailbox, string $mailboxType): array
     {
-        $overview = imap_fetch_overview($connection, (string) $uid, FT_UID)[0] ?? null;
-        $structure = imap_fetchstructure($connection, (string) $uid, FT_UID);
+        $overviewResult = @imap_fetch_overview($connection, (string) $uid, FT_UID);
+        $overview = is_array($overviewResult) ? ($overviewResult[0] ?? null) : null;
+
+        if (! $overview) {
+            throw new RuntimeException($this->lastError('Could not fetch inbox message headers. Try a smaller fetch limit.'));
+        }
+
+        $structure = @imap_fetchstructure($connection, (string) $uid, FT_UID);
 
         $from = $this->parseAddress((string) ($overview->from ?? ''));
         $to = $this->parseAddress((string) ($overview->to ?? $account->email));
@@ -79,6 +216,8 @@ class ImapMailboxClient
 
         return [
             'uid' => $uid,
+            'mailbox' => $mailbox,
+            'mailbox_type' => $mailboxType,
             'message_id' => trim((string) ($overview->message_id ?? ''), '<>') ?: null,
             'from_name' => $from['name'],
             'from_email' => $from['email'],
@@ -201,6 +340,55 @@ class ImapMailboxClient
             'name' => isset($matches[1]) ? trim($this->decodeMime($matches[1])) ?: null : null,
             'email' => isset($matches[2]) ? strtolower(trim($matches[2])) : null,
         ];
+    }
+
+    private function normalizeMailboxType(string $mailboxType): string
+    {
+        $mailboxType = strtolower(trim($mailboxType));
+
+        return in_array($mailboxType, array_keys(self::mailboxTypeOptions()), true)
+            ? $mailboxType
+            : self::MAILBOX_INBOX;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function mailboxTypeOptions(): array
+    {
+        return [
+            self::MAILBOX_INBOX => 'Inbox',
+            self::MAILBOX_SPAM => 'Spam / Junk',
+            self::MAILBOX_SENT => 'Sent',
+            self::MAILBOX_DRAFTS => 'Drafts',
+            self::MAILBOX_TRASH => 'Trash',
+            self::MAILBOX_ARCHIVE => 'Archive',
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function mailboxCandidates(string $mailboxType): array
+    {
+        return match ($this->normalizeMailboxType($mailboxType)) {
+            self::MAILBOX_SPAM => ['INBOX.spam', 'INBOX.Spam', 'Spam', 'spam', 'Junk', 'INBOX.Junk', 'Junk E-mail', '[Gmail]/Spam'],
+            self::MAILBOX_SENT => ['INBOX.Sent', 'Sent', 'sent', 'Sent Items', 'INBOX.Sent Items', '[Gmail]/Sent Mail'],
+            self::MAILBOX_DRAFTS => ['INBOX.Drafts', 'Drafts', 'drafts', '[Gmail]/Drafts'],
+            self::MAILBOX_TRASH => ['INBOX.Trash', 'Trash', 'trash', 'Deleted Items', 'INBOX.Deleted Items', '[Gmail]/Trash'],
+            self::MAILBOX_ARCHIVE => ['INBOX.Archive', 'Archive', 'archive', '[Gmail]/All Mail'],
+            default => ['INBOX'],
+        };
+    }
+
+    private function mailboxTypeLabel(string $mailboxType): string
+    {
+        return self::mailboxTypeOptions()[$this->normalizeMailboxType($mailboxType)] ?? 'Inbox';
+    }
+
+    private function encodeMailboxName(string $mailbox): string
+    {
+        return function_exists('imap_utf7_encode') ? imap_utf7_encode($mailbox) : $mailbox;
     }
 
     private function decodeMime(string $value): string

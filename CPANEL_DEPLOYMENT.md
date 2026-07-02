@@ -42,7 +42,32 @@ Use PHP 8.3 or newer.
 
 For Git deployment, see `GIT_DEPLOYMENT.md`.
 
-## 2. Upload Files
+## 2. Check The Web PHP Runtime
+
+If you need to prove which PHP runtime the domain is using, temporarily upload
+`scripts/deploy-check.php` into the domain's public web root as
+`deploy-check.php`, then open:
+
+```text
+https://mailcore.yourdomain.co.za/deploy-check.php
+```
+
+All required checks should pass. This page does not boot Laravel, so it can
+confirm whether the domain's web PHP has the required extensions before the app
+loads.
+
+Delete `deploy-check.php` from the public web root after testing.
+
+If cPanel shows an extension as enabled but this page reports it as missing, the
+domain is using a different PHP runtime than the one you edited in cPanel, or
+the host's PHP build is incomplete. Ask the host to enable the missing extension
+for the web PHP handler serving the domain.
+
+Do not hard-code a PHP handler in `public/.htaccess` unless your host explicitly
+gives you the correct handler name. Use cPanel `MultiPHP Manager` / `Select PHP
+Version` instead.
+
+## 3. Upload Files
 
 Upload `powermail-core-cpanel.zip` into:
 
@@ -54,7 +79,7 @@ Extract the ZIP there.
 
 Do not put the whole Laravel app directly inside `public_html` unless your host cannot set the document root. The public web root should be the `public` directory only.
 
-## 3. Create MySQL Database
+## 4. Create MySQL Database
 
 In cPanel, create:
 
@@ -66,7 +91,7 @@ Password: strong password
 
 Assign the database user to the database with all privileges.
 
-## 4. Create `.env`
+## 5. Create `.env`
 
 Copy `.env.cpanel.example` to `.env` on the server and update:
 
@@ -79,7 +104,7 @@ ADMIN_EMAIL=your_admin_email
 ADMIN_PASSWORD=your_admin_password
 ```
 
-## 5. Run Commands
+## 6. Run Commands
 
 From cPanel Terminal, inside `/home/CPANEL_USER/powermail-core`, run:
 
@@ -95,7 +120,11 @@ php artisan view:cache
 
 If Composer is not available on cPanel, upload the ZIP that includes the `vendor` folder. Then skip `composer install`.
 
-## 6. Permissions
+If cPanel Terminal is not available, use cPanel `Git Version Control` and click
+`Pull or Deploy`, or upload a package that already includes `vendor/` and the
+generated Composer autoload files from your local machine.
+
+## 7. Permissions
 
 If storage/cache errors appear, run:
 
@@ -103,7 +132,7 @@ If storage/cache errors appear, run:
 chmod -R 775 storage bootstrap/cache
 ```
 
-## 7. Login
+## 8. Login
 
 Open:
 
@@ -113,7 +142,7 @@ https://mailcore.yourdomain.co.za/login
 
 Use the `ADMIN_EMAIL` and `ADMIN_PASSWORD` you placed in `.env` before running `php artisan db:seed --force`.
 
-## 8. Inbox Setup
+## 9. Inbox Setup
 
 For each email account:
 

@@ -44,8 +44,23 @@ class Client extends Model
         return $this->hasMany(ApiKey::class);
     }
 
+    public function users(): HasMany
+    {
+        return $this->hasMany(User::class);
+    }
+
     public function emailLogs(): HasMany
     {
         return $this->hasMany(EmailLog::class);
+    }
+
+    public function marketingContacts(): HasMany
+    {
+        return $this->hasMany(MarketingContact::class);
+    }
+
+    public function marketingCampaigns(): HasMany
+    {
+        return $this->hasMany(MarketingCampaign::class);
     }
 }

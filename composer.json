@@ -6,6 +6,11 @@
     "keywords": ["laravel", "email", "smtp", "api"],
     "license": "MIT",
     "require": {
+        "ext-dom": "*",
+        "ext-fileinfo": "*",
+        "ext-mbstring": "*",
+        "ext-pdo": "*",
+        "ext-pdo_mysql": "*",
         "php": "^8.3",
         "laravel/framework": "^13.8",
         "laravel/tinker": "^3.0"
