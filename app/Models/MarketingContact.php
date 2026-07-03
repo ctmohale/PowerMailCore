@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class MarketingContact extends Model
 {
@@ -29,6 +30,7 @@ class MarketingContact extends Model
         'metadata',
         'status',
         'source',
+        'unsubscribe_token',
         'subscribed_at',
         'unsubscribed_at',
         'last_imported_at',
@@ -63,5 +65,20 @@ class MarketingContact extends Model
     public function isSubscribed(): bool
     {
         return $this->status === self::STATUS_SUBSCRIBED;
+    }
+
+    public function ensureUnsubscribeToken(): string
+    {
+        if ($this->unsubscribe_token) {
+            return $this->unsubscribe_token;
+        }
+
+        do {
+            $token = Str::random(48);
+        } while (self::query()->where('unsubscribe_token', $token)->exists());
+
+        $this->forceFill(['unsubscribe_token' => $token])->save();
+
+        return $token;
     }
 }

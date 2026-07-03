@@ -103,6 +103,15 @@ class EmailAccountController extends Controller
             ])],
             'smtp_username' => ['required', 'string', 'max:255'],
             'smtp_password' => ['nullable', 'string', 'max:1000'],
+            'imap_host' => ['nullable', 'required_if:inbox_enabled,1', 'string', 'max:255'],
+            'imap_port' => ['nullable', 'required_if:inbox_enabled,1', 'integer', 'between:1,65535'],
+            'imap_encryption' => ['nullable', Rule::in([
+                EmailAccount::ENCRYPTION_NONE,
+                EmailAccount::ENCRYPTION_STARTTLS,
+                EmailAccount::ENCRYPTION_SSL,
+            ])],
+            'imap_username' => ['nullable', 'required_if:inbox_enabled,1', 'string', 'max:255'],
+            'imap_password' => ['nullable', 'string', 'max:1000'],
         ]);
 
         $validated['client_id'] = $this->resolveClientId((int) ($validated['client_id'] ?? $emailAccount->client_id));
@@ -119,8 +128,14 @@ class EmailAccountController extends Controller
 
         $validated['email'] = Str::lower($validated['email']);
         $validated['is_active'] = $request->boolean('is_active');
+        $validated['inbox_enabled'] = $request->boolean('inbox_enabled');
+        $validated['imap_host'] = $validated['imap_host'] ?? null;
+        $validated['imap_port'] = $validated['imap_port'] ?? 993;
+        $validated['imap_encryption'] = $validated['imap_encryption'] ?? EmailAccount::ENCRYPTION_SSL;
+        $validated['imap_username'] = $validated['imap_username'] ?? null;
         $smtpPasswordSubmitted = filled($validated['smtp_password'] ?? null);
         $smtpPasswordChanged = false;
+        $imapPasswordSubmitted = filled($validated['imap_password'] ?? null);
 
         if ($smtpPasswordSubmitted) {
             try {
@@ -144,11 +159,28 @@ class EmailAccountController extends Controller
             unset($validated['smtp_password']);
         }
 
+        if ($validated['inbox_enabled'] && empty($validated['imap_password']) && ! $emailAccount->hasUsableImapPassword()) {
+            $message = $emailAccount->hasImapPassword()
+                ? 'The saved IMAP password can no longer be decrypted. Re-enter it before enabling inbox access.'
+                : 'Enter the IMAP password before enabling inbox access.';
+
+            return back()
+                ->withErrors(['imap_password' => $message])
+                ->withInput();
+        }
+
+        if (empty($validated['imap_password'])) {
+            unset($validated['imap_password']);
+        } elseif (! $validated['inbox_enabled']) {
+            $validated['imap_password'] = null;
+        }
+
         $emailAccount->update($validated);
 
         $message = match (true) {
             $smtpPasswordSubmitted && $smtpPasswordChanged => 'SMTP email account updated. SMTP password was replaced.',
             $smtpPasswordSubmitted => 'SMTP email account updated. SMTP password is unchanged.',
+            $imapPasswordSubmitted => 'SMTP email account updated. IMAP password was updated.',
             default => 'SMTP email account updated. Existing SMTP password kept.',
         };
 

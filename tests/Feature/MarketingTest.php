@@ -547,7 +547,7 @@ class MarketingTest extends TestCase
             ])
             ->assertRedirect()
             ->assertSessionHasNoErrors()
-            ->assertSessionHas('success', 'Campaign sent: 1 sent, 0 failed.');
+            ->assertSessionHas('success', 'Campaign queued. Delivery will continue in the background.');
 
         $this->assertCount(1, $fakeMailer->sent);
         $this->assertSame('alice@example.com', $fakeMailer->sent[0]['to']);
@@ -570,6 +570,64 @@ class MarketingTest extends TestCase
             'to_email' => 'alice@example.com',
             'status' => EmailLog::STATUS_SENT,
             'provider_message_id' => 'marketing-message-id',
+        ]);
+    }
+
+    public function test_marketing_template_campaign_adds_unsubscribe_footer_and_link_unsubscribes_contact(): void
+    {
+        $fakeMailer = new class extends SmtpMailer
+        {
+            public array $sent = [];
+
+            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null): ?string
+            {
+                $this->sent[] = compact('account', 'to', 'subject', 'html', 'text');
+
+                return 'marketing-template-message-id';
+            }
+        };
+
+        $this->app->instance(SmtpMailer::class, $fakeMailer);
+
+        [$user, $client,, $account, $template] = $this->createMarketingFixture();
+        $contact = MarketingContact::create([
+            'client_id' => $client->id,
+            'email' => 'alice@example.com',
+            'name' => 'Alice Example',
+            'first_name' => 'Alice',
+            'status' => MarketingContact::STATUS_SUBSCRIBED,
+            'subscribed_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->post('/marketing/campaigns', [
+                'client_id' => $client->id,
+                'email_account_id' => $account->id,
+                'email_template_id' => $template->id,
+                'name' => 'Template Campaign',
+                'subject' => 'Hello {{ first_name }}',
+                'send_now' => '1',
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success', 'Campaign queued. Delivery will continue in the background.');
+
+        $this->assertCount(1, $fakeMailer->sent);
+        $this->assertStringContainsString('Unsubscribe', $fakeMailer->sent[0]['html']);
+        $this->assertStringContainsString('Unsubscribe from marketing emails:', $fakeMailer->sent[0]['text']);
+        $this->assertNotNull($contact->fresh()->unsubscribe_token);
+
+        preg_match('/href="([^"]+)"/', $fakeMailer->sent[0]['html'], $matches);
+        $unsubscribeUrl = html_entity_decode($matches[1]);
+        $unsubscribePath = parse_url($unsubscribeUrl, PHP_URL_PATH).'?'.parse_url($unsubscribeUrl, PHP_URL_QUERY);
+
+        $this->get($unsubscribePath)
+            ->assertOk()
+            ->assertSee('You are unsubscribed');
+
+        $this->assertDatabaseHas('marketing_contacts', [
+            'id' => $contact->id,
+            'status' => MarketingContact::STATUS_UNSUBSCRIBED,
         ]);
     }
 
@@ -648,6 +706,7 @@ class MarketingTest extends TestCase
             'key' => 'marketing',
             'name' => 'Marketing Template',
             'subject' => 'Hello {{ name }}',
+            'type' => EmailTemplate::TYPE_MARKETING,
             'body_html' => '<p>Hello {{ name }}</p>',
             'body_text' => 'Hello {{ name }}',
             'is_active' => true,

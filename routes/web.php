@@ -21,6 +21,10 @@ Route::get('/email-tracking/open/{emailLog}', [EmailTrackingController::class, '
     ->middleware('signed:relative')
     ->name('email-tracking.open');
 
+Route::get('/email-tracking/unsubscribe/{marketingContact}/{token}', [EmailTrackingController::class, 'unsubscribe'])
+    ->middleware('signed:relative')
+    ->name('email-tracking.unsubscribe');
+
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthController::class, 'create'])->name('login');
     Route::post('/login', [AuthController::class, 'store'])->name('login.store');
@@ -56,6 +60,7 @@ Route::middleware(['auth', 'active.user'])->group(function (): void {
         Route::get('/api-keys', [ApiKeyController::class, 'index'])->name('api-keys.index');
         Route::post('/api-keys', [ApiKeyController::class, 'store'])->name('api-keys.store');
         Route::patch('/api-keys/{apiKey}', [ApiKeyController::class, 'update'])->name('api-keys.update');
+        Route::patch('/api-keys/{apiKey}/regenerate', [ApiKeyController::class, 'regenerate'])->name('api-keys.regenerate');
         Route::delete('/api-keys/{apiKey}', [ApiKeyController::class, 'destroy'])->name('api-keys.destroy');
     });
 
@@ -90,6 +95,7 @@ Route::middleware(['auth', 'active.user'])->group(function (): void {
         Route::delete('/marketing/contacts/{marketingContact}', [MarketingController::class, 'destroyContact'])->name('marketing.contacts.destroy');
         Route::post('/marketing/campaigns', [MarketingController::class, 'storeCampaign'])->name('marketing.campaigns.store');
         Route::get('/marketing/campaigns/{marketingCampaign}', [MarketingController::class, 'showCampaign'])->name('marketing.campaigns.show');
+        Route::get('/marketing/campaigns/{marketingCampaign}/status', [MarketingController::class, 'campaignStatus'])->name('marketing.campaigns.status');
         Route::post('/marketing/campaigns/{marketingCampaign}/send', [MarketingController::class, 'sendCampaign'])->name('marketing.campaigns.send');
     });
 

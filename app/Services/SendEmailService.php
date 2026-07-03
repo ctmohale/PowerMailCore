@@ -7,6 +7,7 @@ use App\Models\ApiKey;
 use App\Models\EmailAccount;
 use App\Models\EmailLog;
 use App\Models\EmailTemplate;
+use App\Models\MarketingContact;
 use App\Models\ReceivedEmail;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\URL;
@@ -150,6 +151,24 @@ class SendEmailService
             throw new EmailSendException('Template key was not found for this client.', $log);
         }
 
+        $marketingContact = null;
+        if ($template->isMarketing()) {
+            $marketingContact = $this->marketingContactForRecipient($clientId, $payload);
+            $payload['marketing_contact_id'] = $marketingContact->id;
+
+            if (! $marketingContact->isSubscribed()) {
+                $log = $this->createFailedLog(
+                    $clientId,
+                    $payload,
+                    'Recipient has unsubscribed from marketing emails.',
+                    $account,
+                    $apiKey,
+                );
+
+                throw new EmailSendException('Recipient has unsubscribed from marketing emails.', $log);
+            }
+        }
+
         $subject = $this->renderer->render($subjectOverride !== '' ? $subjectOverride : $template->subject, $data);
         $htmlData = $this->dataWithHtmlBodySlots($data);
         $html = $this->renderer->render($template->body_html, $htmlData, escapeHtml: true, rawKeys: [
@@ -161,6 +180,12 @@ class SendEmailService
         $text = $template->body_text
             ? $this->renderer->render($template->body_text, $data)
             : trim(html_entity_decode(strip_tags(str_replace(['<br>', '<br/>', '<br />'], "\n", $html))));
+
+        if ($marketingContact) {
+            $unsubscribeUrl = $this->unsubscribeUrl($marketingContact);
+            $html = $this->appendMarketingUnsubscribeFooter($html, $unsubscribeUrl);
+            $text = $this->appendMarketingUnsubscribeText($text, $unsubscribeUrl);
+        }
 
         $log = EmailLog::create([
             'client_id' => $clientId,
@@ -175,6 +200,7 @@ class SendEmailService
             'status' => EmailLog::STATUS_PENDING,
             'payload' => [
                 'template_key' => $template->key,
+                'template_type' => $template->type,
                 'marketing_contact_id' => $payload['marketing_contact_id'] ?? null,
                 'data' => $data,
             ],
@@ -241,6 +267,61 @@ class SendEmailService
         }
 
         return $html.$pixel;
+    }
+
+    /**
+     * @param  array{to:string,marketing_contact_id?:int}  $payload
+     */
+    private function marketingContactForRecipient(int $clientId, array $payload): MarketingContact
+    {
+        if (! empty($payload['marketing_contact_id'])) {
+            $contact = MarketingContact::query()
+                ->where('client_id', $clientId)
+                ->find($payload['marketing_contact_id']);
+
+            if ($contact && Str::lower($contact->email) === Str::lower($payload['to'])) {
+                return $contact;
+            }
+        }
+
+        return MarketingContact::firstOrCreate([
+            'client_id' => $clientId,
+            'email' => Str::lower($payload['to']),
+        ], [
+            'status' => MarketingContact::STATUS_SUBSCRIBED,
+            'source' => 'marketing_template_send',
+            'subscribed_at' => now(),
+        ]);
+    }
+
+    private function unsubscribeUrl(MarketingContact $contact): string
+    {
+        $trackingBaseUrl = rtrim((string) config('mail.tracking_url', config('app.url')), '/');
+        $path = URL::signedRoute('email-tracking.unsubscribe', [
+            'marketingContact' => $contact,
+            'token' => $contact->ensureUnsubscribeToken(),
+        ], absolute: false);
+
+        return $trackingBaseUrl.$path;
+    }
+
+    private function appendMarketingUnsubscribeFooter(string $html, string $unsubscribeUrl): string
+    {
+        $footer = '<div style="margin-top:32px;padding:20px 0;border-top:1px solid #e5e7eb;color:#6b7280;font-family:Arial,sans-serif;font-size:12px;line-height:1.5;text-align:center;">'
+            .'You are receiving this marketing email. You can stop receiving these emails at any time. '
+            .'<a href="'.e($unsubscribeUrl).'" style="display:inline-block;margin-top:10px;padding:9px 14px;border-radius:6px;background:#111827;color:#ffffff;text-decoration:none;font-weight:700;">Unsubscribe</a>'
+            .'</div>';
+
+        if (preg_match('/<\/body>/i', $html)) {
+            return preg_replace('/<\/body>/i', $footer.'</body>', $html, 1) ?? $html.$footer;
+        }
+
+        return $html.$footer;
+    }
+
+    private function appendMarketingUnsubscribeText(?string $text, string $unsubscribeUrl): string
+    {
+        return trim((string) $text)."\n\nUnsubscribe from marketing emails:\n".$unsubscribeUrl;
     }
 
     private function recordSentMailboxMessage(EmailAccount $account, EmailLog $log, string $html, ?string $text): void

@@ -47,6 +47,7 @@ class EmailTemplateController extends Controller
             ],
             'name' => ['required', 'string', 'max:255'],
             'subject' => ['required', 'string', 'max:255'],
+            'type' => ['required', Rule::in([EmailTemplate::TYPE_COMMUNICATION, EmailTemplate::TYPE_MARKETING])],
             'body_html' => ['required', 'string'],
             'body_text' => ['nullable', 'string'],
         ]);
@@ -84,6 +85,7 @@ class EmailTemplateController extends Controller
             ],
             'name' => ['required', 'string', 'max:255'],
             'subject' => ['required', 'string', 'max:255'],
+            'type' => ['required', Rule::in([EmailTemplate::TYPE_COMMUNICATION, EmailTemplate::TYPE_MARKETING])],
             'body_html' => ['required', 'string'],
             'body_text' => ['nullable', 'string'],
         ]);

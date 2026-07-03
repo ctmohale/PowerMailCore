@@ -166,10 +166,11 @@
                                         <button class="danger tiny" type="submit">Delete</button>
                                     </form>
                                 </div>
-                                <dialog class="edit-dialog" id="edit-account-{{ $account->id }}">
+                                <dialog class="edit-dialog" id="edit-account-{{ $account->id }}" data-auto-open="{{ old('_dialog') === 'edit-account-'.$account->id ? 'true' : 'false' }}">
                                     <form method="POST" action="{{ route('email-accounts.update', $account) }}">
                                         @csrf
                                         @method('PATCH')
+                                        <input type="hidden" name="_dialog" value="edit-account-{{ $account->id }}">
                                         <div class="edit-dialog-body">
                                             <h2>Edit Email Account</h2>
                                             <p>{{ $account->email }}</p>
@@ -232,6 +233,35 @@
                                                     <input name="is_active" type="checkbox" value="1" @checked(old('is_active', $account->is_active ? '1' : '0') === '1')>
                                                     Active
                                                 </label>
+                                                <input type="hidden" name="inbox_enabled" value="0">
+                                                <label class="field checkbox">
+                                                    <input name="inbox_enabled" type="checkbox" value="1" @checked(old('inbox_enabled', $account->inbox_enabled ? '1' : '0') === '1')>
+                                                    Enable inbox access
+                                                </label>
+                                                <div class="field">
+                                                    <label for="imap_host_{{ $account->id }}">IMAP Host</label>
+                                                    <input id="imap_host_{{ $account->id }}" name="imap_host" value="{{ old('imap_host', $account->imap_host) }}" placeholder="mail.domain.co.za">
+                                                </div>
+                                                <div class="field">
+                                                    <label for="imap_port_{{ $account->id }}">IMAP Port</label>
+                                                    <input id="imap_port_{{ $account->id }}" name="imap_port" type="number" value="{{ old('imap_port', $account->imap_port ?? 993) }}" min="1" max="65535">
+                                                </div>
+                                                <div class="field">
+                                                    <label for="imap_encryption_{{ $account->id }}">IMAP Encryption</label>
+                                                    <select id="imap_encryption_{{ $account->id }}" name="imap_encryption">
+                                                        <option value="ssl" @selected(old('imap_encryption', $account->imap_encryption ?? 'ssl') === 'ssl')>SSL</option>
+                                                        <option value="starttls" @selected(old('imap_encryption', $account->imap_encryption) === 'starttls')>STARTTLS</option>
+                                                        <option value="none" @selected(old('imap_encryption', $account->imap_encryption) === 'none')>None</option>
+                                                    </select>
+                                                </div>
+                                                <div class="field">
+                                                    <label for="imap_username_{{ $account->id }}">IMAP Username</label>
+                                                    <input id="imap_username_{{ $account->id }}" name="imap_username" value="{{ old('imap_username', $account->imap_username) }}" placeholder="info@domain.co.za">
+                                                </div>
+                                                <div class="field">
+                                                    <label for="imap_password_{{ $account->id }}">IMAP Password</label>
+                                                    <input id="imap_password_{{ $account->id }}" name="imap_password" type="password" autocomplete="new-password" placeholder="{{ $account->hasUsableImapPassword() ? 'Leave blank to keep current password' : ($account->hasImapPassword() ? 'Re-enter password to restore inbox' : '') }}">
+                                                </div>
                                             </div>
                                         </div>
                                         <div class="edit-dialog-actions">

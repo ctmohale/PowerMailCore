@@ -5,6 +5,49 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'PowerMail Core')</title>
+    @auth
+        @php
+            $activeSidebarSection = match (true) {
+                request()->routeIs('dashboard') => 'overview',
+                request()->routeIs('clients.*', 'users.*') => 'companies',
+                request()->routeIs('send-email.*', 'inbox.*', 'email-logs.*') => 'mail',
+                request()->routeIs('marketing.*') => 'marketing',
+                request()->routeIs('api-keys.*') => 'developer',
+                request()->routeIs('domains.*', 'email-accounts.*', 'email-templates.*') => 'settings',
+                default => null,
+            };
+        @endphp
+        <script>
+            (() => {
+                const root = document.documentElement;
+                const activeSection = @json($activeSidebarSection);
+                const defaultCollapsedSections = new Set(['overview', 'companies', 'mail']);
+                const allSections = ['overview', 'companies', 'mail', 'marketing', 'developer', 'settings'];
+
+                if (localStorage.getItem('powermail.sidebar.collapsed') === 'true') {
+                    root.classList.add('sidebar-collapsed');
+                }
+
+                let sectionState = {};
+
+                try {
+                    sectionState = JSON.parse(localStorage.getItem('powermail.sidebar.sections') || '{}') || {};
+                } catch (error) {
+                    sectionState = {};
+                }
+
+                allSections.forEach((section) => {
+                    const hasSavedState = Object.prototype.hasOwnProperty.call(sectionState, section);
+                    const collapsed = section !== activeSection
+                        && (hasSavedState ? sectionState[section] === true : defaultCollapsedSections.has(section));
+
+                    if (collapsed) {
+                        root.classList.add(`nav-section-collapsed-${section}`);
+                    }
+                });
+            })();
+        </script>
+    @endauth
     <style>
         :root {
             --primary: #4F6BFF;
@@ -152,17 +195,73 @@
         }
 
         .nav-section-title {
+            align-items: center;
+            background: transparent;
+            border: 0;
+            border-radius: 10px;
+            box-shadow: none;
             color: #9CA3AF;
+            cursor: pointer;
+            display: flex;
             font-size: 10px;
             font-weight: 900;
+            justify-content: space-between;
             letter-spacing: 0.09em;
+            min-height: 26px;
             padding: 0 12px 2px;
+            text-align: left;
             text-transform: uppercase;
+            width: 100%;
+        }
+
+        .nav-section-title:hover {
+            background: #F8FAFC;
+            box-shadow: none;
+            color: var(--primary);
+            transform: none;
+        }
+
+        .nav-section-chevron {
+            height: 13px;
+            opacity: 0.72;
+            transition: transform 180ms ease;
+            width: 13px;
+        }
+
+        .nav-section.collapsed .nav-section-chevron {
+            transform: rotate(-90deg);
         }
 
         .nav-section-items {
             display: grid;
             gap: 4px;
+            max-height: 520px;
+            overflow: hidden;
+            transition: max-height 200ms ease, opacity 180ms ease;
+        }
+
+        .nav-section.collapsed .nav-section-items {
+            max-height: 0;
+            opacity: 0;
+        }
+
+        html.nav-section-collapsed-overview [data-nav-section="overview"] .nav-section-chevron,
+        html.nav-section-collapsed-companies [data-nav-section="companies"] .nav-section-chevron,
+        html.nav-section-collapsed-mail [data-nav-section="mail"] .nav-section-chevron,
+        html.nav-section-collapsed-marketing [data-nav-section="marketing"] .nav-section-chevron,
+        html.nav-section-collapsed-developer [data-nav-section="developer"] .nav-section-chevron,
+        html.nav-section-collapsed-settings [data-nav-section="settings"] .nav-section-chevron {
+            transform: rotate(-90deg);
+        }
+
+        html.nav-section-collapsed-overview [data-nav-section="overview"] .nav-section-items,
+        html.nav-section-collapsed-companies [data-nav-section="companies"] .nav-section-items,
+        html.nav-section-collapsed-mail [data-nav-section="mail"] .nav-section-items,
+        html.nav-section-collapsed-marketing [data-nav-section="marketing"] .nav-section-items,
+        html.nav-section-collapsed-developer [data-nav-section="developer"] .nav-section-items,
+        html.nav-section-collapsed-settings [data-nav-section="settings"] .nav-section-items {
+            max-height: 0;
+            opacity: 0;
         }
 
         .sidebar-nav a {
@@ -274,71 +373,71 @@
         }
 
         @media (min-width: 961px) {
-            body.sidebar-collapsed .sidebar {
+            :is(html.sidebar-collapsed, body.sidebar-collapsed) .sidebar {
                 padding-left: 14px;
                 padding-right: 14px;
                 width: var(--sidebar-collapsed-width);
             }
 
-            body.sidebar-collapsed .app-main {
+            :is(html.sidebar-collapsed, body.sidebar-collapsed) .app-main {
                 margin-left: var(--sidebar-collapsed-width);
             }
 
-            body.sidebar-collapsed .sidebar-head {
+            :is(html.sidebar-collapsed, body.sidebar-collapsed) .sidebar-head {
                 flex-direction: column;
                 gap: 10px;
                 justify-content: center;
                 margin-bottom: 20px;
             }
 
-            body.sidebar-collapsed .brand {
+            :is(html.sidebar-collapsed, body.sidebar-collapsed) .brand {
                 padding: 0;
             }
 
-            body.sidebar-collapsed .brand-text,
-            body.sidebar-collapsed .nav-section-title,
-            body.sidebar-collapsed .sidebar-nav a > span:not(.nav-icon),
-            body.sidebar-collapsed .sidebar-footer strong,
-            body.sidebar-collapsed .sidebar-footer > span:not(.role-badge),
-            body.sidebar-collapsed .sidebar-footer .role-badge {
+            :is(html.sidebar-collapsed, body.sidebar-collapsed) .brand-text,
+            :is(html.sidebar-collapsed, body.sidebar-collapsed) .nav-section-title,
+            :is(html.sidebar-collapsed, body.sidebar-collapsed) .sidebar-nav a > span:not(.nav-icon),
+            :is(html.sidebar-collapsed, body.sidebar-collapsed) .sidebar-footer strong,
+            :is(html.sidebar-collapsed, body.sidebar-collapsed) .sidebar-footer > span:not(.role-badge),
+            :is(html.sidebar-collapsed, body.sidebar-collapsed) .sidebar-footer .role-badge {
                 display: none;
             }
 
-            body.sidebar-collapsed .sidebar-toggle svg {
+            :is(html.sidebar-collapsed, body.sidebar-collapsed) .sidebar-toggle svg {
                 transform: rotate(180deg);
             }
 
-            body.sidebar-collapsed .sidebar-scroll {
+            :is(html.sidebar-collapsed, body.sidebar-collapsed) .sidebar-scroll {
                 padding-right: 0;
             }
 
-            body.sidebar-collapsed .sidebar-nav {
+            :is(html.sidebar-collapsed, body.sidebar-collapsed) .sidebar-nav {
                 align-items: center;
                 gap: 14px;
             }
 
-            body.sidebar-collapsed .nav-section,
-            body.sidebar-collapsed .nav-section-items {
+            :is(html.sidebar-collapsed, body.sidebar-collapsed) .nav-section,
+            :is(html.sidebar-collapsed, body.sidebar-collapsed) .nav-section-items {
                 width: 100%;
             }
 
-            body.sidebar-collapsed .sidebar-nav a {
+            :is(html.sidebar-collapsed, body.sidebar-collapsed) .sidebar-nav a {
                 gap: 0;
                 justify-content: center;
                 padding-left: 0;
                 padding-right: 0;
             }
 
-            body.sidebar-collapsed .sidebar-nav a:hover {
+            :is(html.sidebar-collapsed, body.sidebar-collapsed) .sidebar-nav a:hover {
                 transform: none;
             }
 
-            body.sidebar-collapsed .nav-icon {
+            :is(html.sidebar-collapsed, body.sidebar-collapsed) .nav-icon {
                 height: 34px;
                 width: 34px;
             }
 
-            body.sidebar-collapsed .sidebar-footer {
+            :is(html.sidebar-collapsed, body.sidebar-collapsed) .sidebar-footer {
                 display: none;
             }
         }
@@ -808,6 +907,98 @@
             display: block;
             height: 100%;
             min-width: 3px;
+        }
+
+        .campaign-progress-panel {
+            align-items: center;
+            display: grid;
+            gap: 18px;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+        }
+
+        .campaign-progress-spinner {
+            align-items: center;
+            background: var(--soft-blue);
+            border-radius: 999px;
+            color: var(--primary);
+            display: inline-flex;
+            height: 58px;
+            justify-content: center;
+            position: relative;
+            width: 58px;
+        }
+
+        .campaign-progress-spinner::before {
+            animation: button-spin 900ms linear infinite;
+            border: 3px solid rgba(79, 107, 255, 0.18);
+            border-radius: inherit;
+            border-top-color: var(--primary);
+            content: "";
+            inset: 6px;
+            position: absolute;
+        }
+
+        .campaign-progress-spinner.complete::before {
+            animation: none;
+            border-color: var(--success);
+        }
+
+        .campaign-progress-spinner.failed::before {
+            animation: none;
+            border-color: var(--error);
+        }
+
+        .campaign-progress-spinner strong {
+            font-size: 12px;
+            font-weight: 900;
+            position: relative;
+            z-index: 1;
+        }
+
+        .campaign-progress-copy {
+            display: grid;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .campaign-progress-copy h2 {
+            margin: 0;
+        }
+
+        .campaign-progress-stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .campaign-progress-stats span {
+            background: #F8FAFC;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-weight: 850;
+            padding: 6px 10px;
+        }
+
+        .campaign-progress-toast {
+            background: #111827;
+            border-radius: 14px;
+            bottom: 22px;
+            box-shadow: 0 18px 38px rgba(17, 24, 39, 0.22);
+            color: #fff;
+            display: none;
+            font-weight: 850;
+            max-width: min(420px, calc(100vw - 32px));
+            padding: 12px 14px;
+            position: fixed;
+            right: 22px;
+            z-index: 80;
+        }
+
+        .campaign-progress-toast.active {
+            display: block;
         }
 
         .quick-actions {
@@ -1458,6 +1649,52 @@
             min-height: 44px;
             padding: 10px 18px;
             transition: transform 220ms ease, box-shadow 220ms ease, opacity 220ms ease;
+        }
+
+        button.is-loading,
+        .button.is-loading {
+            color: transparent !important;
+            cursor: wait;
+            opacity: 0.82;
+            pointer-events: none;
+            position: relative;
+        }
+
+        button.is-loading *,
+        .button.is-loading * {
+            opacity: 0 !important;
+        }
+
+        button.is-loading::after,
+        .button.is-loading::after {
+            animation: button-spin 760ms linear infinite;
+            border: 2px solid rgba(255, 255, 255, 0.42);
+            border-radius: 999px;
+            border-top-color: #fff;
+            content: "";
+            height: 16px;
+            left: 50%;
+            margin-left: -8px;
+            margin-top: -8px;
+            position: absolute;
+            top: 50%;
+            width: 16px;
+        }
+
+        button.secondary.is-loading::after,
+        .button.secondary.is-loading::after {
+            border-color: rgba(79, 107, 255, 0.22);
+            border-top-color: var(--primary);
+        }
+
+        button.danger.is-loading::after,
+        .button.danger.is-loading::after {
+            border-color: rgba(239, 68, 68, 0.22);
+            border-top-color: var(--error);
+        }
+
+        @keyframes button-spin {
+            to { transform: rotate(360deg); }
         }
 
         button:hover,
@@ -3772,9 +4009,12 @@
 
                 <div class="sidebar-scroll">
                     <nav class="sidebar-nav" aria-label="Primary">
-                        <div class="nav-section">
-                            <div class="nav-section-title">Overview</div>
-                            <div class="nav-section-items">
+                        <div class="nav-section" data-nav-section="overview">
+                            <button class="nav-section-title" type="button" data-nav-section-toggle aria-expanded="true" aria-controls="nav-section-overview">
+                                <span>Overview</span>
+                                <svg class="nav-section-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                            </button>
+                            <div class="nav-section-items" id="nav-section-overview">
                                 <a href="{{ route('dashboard') }}" title="Dashboard" aria-label="Dashboard" @class(['active' => request()->routeIs('dashboard')])>
                                     <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 13h8V3H3v10Z"/><path d="M13 21h8V11h-8v10Z"/><path d="M13 3v6h8V3h-8Z"/><path d="M3 21h8v-6H3v6Z"/></svg></span>
                                     <span>Dashboard</span>
@@ -3783,9 +4023,12 @@
                         </div>
 
                         @if ($currentUser->isAdmin())
-                            <div class="nav-section">
-                                <div class="nav-section-title">Companies</div>
-                                <div class="nav-section-items">
+                            <div class="nav-section" data-nav-section="companies">
+                                <button class="nav-section-title" type="button" data-nav-section-toggle aria-expanded="true" aria-controls="nav-section-companies">
+                                    <span>Companies</span>
+                                    <svg class="nav-section-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                                </button>
+                                <div class="nav-section-items" id="nav-section-companies">
                                     <a href="{{ route('clients.index') }}" title="Clients" aria-label="Clients" @class(['active' => request()->routeIs('clients.*')])>
                                         <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
                                         <span>Clients</span>
@@ -3799,9 +4042,12 @@
                         @endif
 
                         @if ($currentUser->canAccess(\App\Models\User::PERMISSION_SEND_EMAILS) || $currentUser->canAccess(\App\Models\User::PERMISSION_VIEW_INBOX) || $currentUser->canAccess(\App\Models\User::PERMISSION_VIEW_LOGS))
-                            <div class="nav-section">
-                                <div class="nav-section-title">Mail Operations</div>
-                                <div class="nav-section-items">
+                            <div class="nav-section" data-nav-section="mail">
+                                <button class="nav-section-title" type="button" data-nav-section-toggle aria-expanded="true" aria-controls="nav-section-mail">
+                                    <span>Mail Operations</span>
+                                    <svg class="nav-section-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                                </button>
+                                <div class="nav-section-items" id="nav-section-mail">
                                     @if ($currentUser->canAccess(\App\Models\User::PERMISSION_SEND_EMAILS))
                                         <a href="{{ route('send-email.index') }}" title="Send Email" aria-label="Send Email" @class(['active' => request()->routeIs('send-email.*')])>
                                             <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></span>
@@ -3825,9 +4071,12 @@
                         @endif
 
                         @if ($currentUser->canAccess(\App\Models\User::PERMISSION_MANAGE_MARKETING))
-                            <div class="nav-section">
-                                <div class="nav-section-title">Marketing</div>
-                                <div class="nav-section-items">
+                            <div class="nav-section" data-nav-section="marketing">
+                                <button class="nav-section-title" type="button" data-nav-section-toggle aria-expanded="true" aria-controls="nav-section-marketing">
+                                    <span>Marketing</span>
+                                    <svg class="nav-section-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                                </button>
+                                <div class="nav-section-items" id="nav-section-marketing">
                                     <a href="{{ route('marketing.index') }}" title="Marketing" aria-label="Marketing" @class(['active' => request()->routeIs('marketing.*')])>
                                         <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11h4l10-5v12L7 13H3z"/><path d="M7 13v5a2 2 0 0 0 2 2h1"/><path d="M21 9v6"/></svg></span>
                                         <span>Marketing</span>
@@ -3837,9 +4086,12 @@
                         @endif
 
                         @if ($currentUser->isAdmin())
-                            <div class="nav-section">
-                                <div class="nav-section-title">Developer</div>
-                                <div class="nav-section-items">
+                            <div class="nav-section" data-nav-section="developer">
+                                <button class="nav-section-title" type="button" data-nav-section-toggle aria-expanded="true" aria-controls="nav-section-developer">
+                                    <span>Developer</span>
+                                    <svg class="nav-section-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                                </button>
+                                <div class="nav-section-items" id="nav-section-developer">
                                     <a href="{{ route('api-keys.index') }}" title="API Keys" aria-label="API Keys" @class(['active' => request()->routeIs('api-keys.*')])>
                                         <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15 2 6 6"/><path d="m18 5 3 3"/></svg></span>
                                         <span>API Keys</span>
@@ -3849,9 +4101,12 @@
                         @endif
 
                         @if ($currentUser->isAdmin() || $currentUser->canAccess(\App\Models\User::PERMISSION_MANAGE_ACCOUNTS) || $currentUser->canAccess(\App\Models\User::PERMISSION_MANAGE_TEMPLATES))
-                            <div class="nav-section settings-nav-section">
-                                <div class="nav-section-title">Settings</div>
-                                <div class="nav-section-items">
+                            <div class="nav-section settings-nav-section" data-nav-section="settings">
+                                <button class="nav-section-title" type="button" data-nav-section-toggle aria-expanded="true" aria-controls="nav-section-settings">
+                                    <span>Settings</span>
+                                    <svg class="nav-section-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                                </button>
+                                <div class="nav-section-items" id="nav-section-settings">
                                     @if ($currentUser->isAdmin())
                                         <a href="{{ route('domains.index') }}" title="Domains" aria-label="Domains" @class(['active' => request()->routeIs('domains.*')])>
                                             <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 0 20"/><path d="M12 2a15.3 15.3 0 0 0 0 20"/></svg></span>
@@ -3949,13 +4204,17 @@
         <script>
             (() => {
                 const storageKey = 'powermail.sidebar.collapsed';
+                const sectionsStorageKey = 'powermail.sidebar.sections';
+                const defaultCollapsedSections = new Set(['overview', 'companies', 'mail']);
                 const toggle = document.querySelector('[data-sidebar-toggle]');
+                const sections = document.querySelectorAll('[data-nav-section]');
 
                 if (!toggle) {
                     return;
                 }
 
                 const setCollapsed = (collapsed) => {
+                    document.documentElement.classList.toggle('sidebar-collapsed', collapsed);
                     document.body.classList.toggle('sidebar-collapsed', collapsed);
                     toggle.setAttribute('aria-pressed', collapsed ? 'true' : 'false');
                     toggle.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
@@ -3967,6 +4226,50 @@
                     const collapsed = !document.body.classList.contains('sidebar-collapsed');
                     localStorage.setItem(storageKey, collapsed ? 'true' : 'false');
                     setCollapsed(collapsed);
+                });
+
+                let sectionState = {};
+
+                try {
+                    sectionState = JSON.parse(localStorage.getItem(sectionsStorageKey) || '{}') || {};
+                } catch (error) {
+                    sectionState = {};
+                }
+
+                const persistSections = () => {
+                    localStorage.setItem(sectionsStorageKey, JSON.stringify(sectionState));
+                };
+
+                const setSectionCollapsed = (section, collapsed) => {
+                    const key = section.dataset.navSection;
+                    const button = section.querySelector('[data-nav-section-toggle]');
+                    const hasActiveItem = Boolean(section.querySelector('.nav-section-items a.active'));
+
+                    if (hasActiveItem) {
+                        collapsed = false;
+                    }
+
+                    document.documentElement.classList.toggle(`nav-section-collapsed-${key}`, collapsed);
+                    section.classList.toggle('collapsed', collapsed);
+                    button?.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+                };
+
+                sections.forEach((section) => {
+                    const key = section.dataset.navSection;
+                    const hasActiveItem = Boolean(section.querySelector('.nav-section-items a.active'));
+                    const hasSavedState = Object.prototype.hasOwnProperty.call(sectionState, key);
+                    const collapsed = hasActiveItem
+                        ? false
+                        : (hasSavedState ? sectionState[key] === true : defaultCollapsedSections.has(key));
+
+                    setSectionCollapsed(section, collapsed);
+
+                    section.querySelector('[data-nav-section-toggle]')?.addEventListener('click', () => {
+                        const nextCollapsed = !section.classList.contains('collapsed');
+                        sectionState[key] = nextCollapsed;
+                        setSectionCollapsed(section, nextCollapsed);
+                        persistSections();
+                    });
                 });
             })();
         </script>
@@ -4100,12 +4403,63 @@
             const cancel = document.getElementById('confirm-cancel');
             const submit = document.getElementById('confirm-submit');
             let pendingForm = null;
+            let pendingSubmitter = null;
+
+            const loadingTargets = new WeakSet();
+
+            const setButtonLoading = (button, persist = false) => {
+                if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true') {
+                    return;
+                }
+
+                button.classList.add('is-loading');
+                button.setAttribute('aria-busy', 'true');
+                loadingTargets.add(button);
+
+                if (button.matches('button[type="submit"], button:not([type]), input[type="submit"]')) {
+                    button.disabled = true;
+                } else if (button.matches('a')) {
+                    button.setAttribute('aria-disabled', 'true');
+                }
+
+                if (!persist) {
+                    window.setTimeout(() => clearButtonLoading(button), 720);
+                }
+            };
+
+            const clearButtonLoading = (button) => {
+                if (!button || !loadingTargets.has(button)) {
+                    return;
+                }
+
+                button.classList.remove('is-loading');
+                button.removeAttribute('aria-busy');
+                loadingTargets.delete(button);
+
+                if (button.matches('button')) {
+                    button.disabled = false;
+                } else if (button.matches('a')) {
+                    button.removeAttribute('aria-disabled');
+                }
+            };
+
+            const shouldPersistLinkLoading = (link) => {
+                const href = link.getAttribute('href') || '';
+
+                return href !== ''
+                    && href !== '#'
+                    && !href.startsWith('#')
+                    && link.target !== '_blank'
+                    && !link.hasAttribute('download');
+            };
 
             document.addEventListener('submit', (event) => {
                 const form = event.target;
                 const confirmText = form?.dataset?.confirm;
+                const submitter = event.submitter instanceof HTMLElement ? event.submitter : form?.querySelector('button[type="submit"], button:not([type]), input[type="submit"]');
 
                 if (!confirmText || form.dataset.confirmed === 'true') {
+                    setButtonLoading(submitter, true);
                     return;
                 }
 
@@ -4114,18 +4468,22 @@
                 if (!dialog?.showModal) {
                     if (window.confirm(confirmText)) {
                         form.dataset.confirmed = 'true';
-                        form.requestSubmit();
+                        submitter instanceof HTMLButtonElement || submitter instanceof HTMLInputElement
+                            ? form.requestSubmit(submitter)
+                            : form.requestSubmit();
                     }
                     return;
                 }
 
                 pendingForm = form;
+                pendingSubmitter = submitter;
                 message.textContent = confirmText;
                 dialog.showModal();
             });
 
             cancel?.addEventListener('click', () => {
                 pendingForm = null;
+                pendingSubmitter = null;
                 dialog.close();
             });
 
@@ -4137,13 +4495,17 @@
 
                 pendingForm.dataset.confirmed = 'true';
                 dialog.close();
-                pendingForm.requestSubmit();
+                setButtonLoading(submit, true);
+                pendingSubmitter instanceof HTMLButtonElement || pendingSubmitter instanceof HTMLInputElement
+                    ? pendingForm.requestSubmit(pendingSubmitter)
+                    : pendingForm.requestSubmit();
             });
 
             document.addEventListener('click', (event) => {
                 const opener = event.target.closest('[data-open-dialog]');
                 const closer = event.target.closest('[data-close-dialog]');
                 const composeTrigger = event.target.closest('[data-compose-to]');
+                const action = event.target.closest('button, a.button, .icon-button');
 
                 if (composeTrigger) {
                     const composeTo = document.getElementById('compose_to');
@@ -4184,6 +4546,21 @@
                 if (closer) {
                     closer.closest('dialog')?.close();
                 }
+
+                if (!action || action.classList.contains('is-loading') || action.matches('[data-nav-section-toggle]')) {
+                    return;
+                }
+
+                if (action.matches('button[type="submit"], button:not([type]), input[type="submit"]')) {
+                    return;
+                }
+
+                if (action.matches('a')) {
+                    setButtonLoading(action, shouldPersistLinkLoading(action));
+                    return;
+                }
+
+                setButtonLoading(action);
             });
 
             const autoOpenDialog = document.querySelector('dialog[data-auto-open="true"]');

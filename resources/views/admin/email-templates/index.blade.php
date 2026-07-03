@@ -85,6 +85,13 @@ HTML;
                                     <label for="create_template_subject">Subject</label>
                                     <input id="create_template_subject" name="subject" value="{{ old('subject') }}" placeholder="Welcome to @{{ name }}" required data-template-subject>
                                 </div>
+                                <div class="field">
+                                    <label for="create_template_type">Type</label>
+                                    <select id="create_template_type" name="type" required>
+                                        <option value="{{ \App\Models\EmailTemplate::TYPE_COMMUNICATION }}" @selected(old('type', \App\Models\EmailTemplate::TYPE_COMMUNICATION) === \App\Models\EmailTemplate::TYPE_COMMUNICATION)>Communication</option>
+                                        <option value="{{ \App\Models\EmailTemplate::TYPE_MARKETING }}" @selected(old('type') === \App\Models\EmailTemplate::TYPE_MARKETING)>Marketing</option>
+                                    </select>
+                                </div>
                                 <div class="field full">
                                     <label for="create_template_body_html">HTML Body</label>
                                     <textarea id="create_template_body_html" class="template-html-editor" name="body_html" required data-template-html>{{ old('body_html', $defaultHtmlBody) }}</textarea>
@@ -123,6 +130,7 @@ HTML;
                         <th>Key</th>
                         <th>Name</th>
                         <th>Client</th>
+                        <th>Type</th>
                         <th>Subject</th>
                         <th>Status</th>
                         <th>Actions</th>
@@ -134,6 +142,7 @@ HTML;
                             <td>{{ $template->key }}</td>
                             <td>{{ $template->name }}</td>
                             <td>{{ $template->client?->name }}</td>
+                            <td><span class="badge {{ $template->isMarketing() ? 'pending' : 'active' }}">{{ $template->isMarketing() ? 'Marketing' : 'Communication' }}</span></td>
                             <td class="wrap">{{ $template->subject }}</td>
                             <td><span class="badge {{ $template->is_active ? 'active' : 'failed' }}">{{ $template->is_active ? 'Active' : 'Inactive' }}</span></td>
                             <td class="actions-cell">
@@ -175,6 +184,13 @@ HTML;
                                                             <label for="subject_{{ $template->id }}">Subject</label>
                                                             <input id="subject_{{ $template->id }}" name="subject" value="{{ old('subject', $template->subject) }}" required data-template-subject>
                                                         </div>
+                                                        <div class="field">
+                                                            <label for="type_{{ $template->id }}">Type</label>
+                                                            <select id="type_{{ $template->id }}" name="type" required>
+                                                                <option value="{{ \App\Models\EmailTemplate::TYPE_COMMUNICATION }}" @selected(old('type', $template->type) === \App\Models\EmailTemplate::TYPE_COMMUNICATION)>Communication</option>
+                                                                <option value="{{ \App\Models\EmailTemplate::TYPE_MARKETING }}" @selected(old('type', $template->type) === \App\Models\EmailTemplate::TYPE_MARKETING)>Marketing</option>
+                                                            </select>
+                                                        </div>
                                                         <div class="field full">
                                                             <label for="body_html_{{ $template->id }}">HTML Body</label>
                                                             <textarea id="body_html_{{ $template->id }}" class="template-html-editor" name="body_html" required data-template-html>{{ old('body_html', $template->body_html) }}</textarea>
@@ -209,7 +225,7 @@ HTML;
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="muted">No templates yet.</td>
+                            <td colspan="7" class="muted">No templates yet.</td>
                         </tr>
                     @endforelse
                 </tbody>

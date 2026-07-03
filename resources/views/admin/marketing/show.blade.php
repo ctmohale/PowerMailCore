@@ -14,6 +14,14 @@
         $attempted = $sentCount + $failedCount;
         $deliveryRate = $attempted > 0 ? round(($sentCount / $attempted) * 100) : 0;
         $openRate = $sentCount > 0 ? round(($openedCount / $sentCount) * 100) : 0;
+        $processedCount = min((int) $campaign->total_recipients, $attempted);
+        $progressPercent = $campaign->total_recipients > 0 ? min(100, round(($processedCount / $campaign->total_recipients) * 100)) : 0;
+        $pendingCount = max(0, (int) $campaign->total_recipients - $processedCount);
+        $progressState = match ($campaign->status) {
+            \App\Models\MarketingCampaign::STATUS_SENT => 'complete',
+            \App\Models\MarketingCampaign::STATUS_FAILED, \App\Models\MarketingCampaign::STATUS_PARTIAL => 'failed',
+            default => '',
+        };
     @endphp
 
     <div class="page-header mail-page-header">
@@ -24,7 +32,7 @@
         </div>
         <div class="actions">
             <a class="button secondary" href="{{ route('marketing.index') }}">Back to Marketing</a>
-            @if ($campaign->status !== \App\Models\MarketingCampaign::STATUS_SENT)
+            @if (! in_array($campaign->status, [\App\Models\MarketingCampaign::STATUS_SENT, \App\Models\MarketingCampaign::STATUS_SENDING], true))
                 <form method="POST" action="{{ route('marketing.campaigns.send', $campaign) }}" data-confirm="Send {{ $campaign->name }} to {{ number_format($campaign->total_recipients) }} subscribed contact{{ $campaign->total_recipients === 1 ? '' : 's' }}?">
                     @csrf
                     <button type="submit">Send Campaign</button>
@@ -32,6 +40,33 @@
             @endif
         </div>
     </div>
+
+    <section
+        class="panel campaign-progress-panel"
+        data-campaign-progress
+        data-status-url="{{ route('marketing.campaigns.status', $campaign) }}"
+        data-running="{{ $campaign->status === \App\Models\MarketingCampaign::STATUS_SENDING ? 'true' : 'false' }}"
+    >
+        <div class="campaign-progress-spinner {{ $progressState }}" data-progress-spinner>
+            <strong data-progress-percent>{{ $progressPercent }}%</strong>
+        </div>
+        <div class="campaign-progress-copy">
+            <h2 data-progress-title>{{ $campaign->status === \App\Models\MarketingCampaign::STATUS_SENDING ? 'Sending campaign' : 'Campaign progress' }}</h2>
+            <p class="muted" data-progress-message>
+                {{ number_format($processedCount) }} of {{ number_format($campaign->total_recipients) }} processed. {{ number_format($pendingCount) }} pending.
+            </p>
+            <div class="bar" aria-hidden="true"><span data-progress-bar style="width: {{ $progressPercent }}%"></span></div>
+        </div>
+        <div class="campaign-progress-stats">
+            <span data-progress-sent>{{ number_format($sentCount) }} sent</span>
+            <span data-progress-failed>{{ number_format($failedCount) }} failed</span>
+            <span data-progress-pending>{{ number_format($pendingCount) }} pending</span>
+            <span data-progress-rate>Rate calculating</span>
+            <span data-progress-eta>ETA calculating</span>
+        </div>
+    </section>
+
+    <div class="campaign-progress-toast" data-campaign-toast role="status" aria-live="polite"></div>
 
     <section class="kpi-grid marketing-metrics" aria-label="Campaign metrics">
         <div class="metric" data-tone="purple">
@@ -213,4 +248,94 @@
             </table>
         </div>
     </section>
+
+    <script>
+        (() => {
+            const panel = document.querySelector('[data-campaign-progress]');
+
+            if (!panel) {
+                return;
+            }
+
+            const endpoint = panel.dataset.statusUrl;
+            const spinner = panel.querySelector('[data-progress-spinner]');
+            const percent = panel.querySelector('[data-progress-percent]');
+            const title = panel.querySelector('[data-progress-title]');
+            const message = panel.querySelector('[data-progress-message]');
+            const bar = panel.querySelector('[data-progress-bar]');
+            const sent = panel.querySelector('[data-progress-sent]');
+            const failed = panel.querySelector('[data-progress-failed]');
+            const pending = panel.querySelector('[data-progress-pending]');
+            const rate = panel.querySelector('[data-progress-rate]');
+            const eta = panel.querySelector('[data-progress-eta]');
+            const toast = document.querySelector('[data-campaign-toast]');
+            let pollTimer = null;
+            let lastProcessed = null;
+
+            const format = (value) => new Intl.NumberFormat().format(value || 0);
+
+            const showToast = (text) => {
+                if (!toast) {
+                    return;
+                }
+
+                toast.textContent = text;
+                toast.classList.add('active');
+                window.clearTimeout(toast._hideTimer);
+                toast._hideTimer = window.setTimeout(() => toast.classList.remove('active'), 3500);
+            };
+
+            const render = (data) => {
+                percent.textContent = `${data.percent}%`;
+                bar.style.width = `${data.percent}%`;
+                sent.textContent = `${format(data.sent)} sent`;
+                failed.textContent = `${format(data.failed)} failed`;
+                pending.textContent = `${format(data.pending)} pending`;
+                rate.textContent = data.rate_per_minute > 0 ? `${data.rate_per_minute}/min` : 'Rate calculating';
+                eta.textContent = data.is_running ? `ETA ${data.eta_label}` : (data.finished_at ? `Finished ${data.finished_at}` : 'ETA calculating');
+                title.textContent = data.is_running ? 'Sending campaign' : `Campaign ${data.status_label}`;
+                message.textContent = `${format(data.processed)} of ${format(data.total)} processed. ${format(data.pending)} pending.`;
+
+                spinner.classList.toggle('complete', data.status === 'sent');
+                spinner.classList.toggle('failed', ['failed', 'partial'].includes(data.status));
+
+                if (lastProcessed !== null && data.processed > lastProcessed) {
+                    showToast(`${format(data.processed)} of ${format(data.total)} processed. ${format(data.sent)} sent, ${format(data.failed)} failed.`);
+                }
+
+                lastProcessed = data.processed;
+
+                if (!data.is_running && pollTimer) {
+                    window.clearInterval(pollTimer);
+                    pollTimer = null;
+                    showToast(`Campaign ${data.status_label}: ${format(data.sent)} sent, ${format(data.failed)} failed.`);
+                }
+            };
+
+            const poll = async () => {
+                try {
+                    const response = await fetch(endpoint, {
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                    });
+
+                    if (!response.ok) {
+                        return;
+                    }
+
+                    render(await response.json());
+                } catch (error) {
+                    showToast('Campaign status update paused. Retrying...');
+                }
+            };
+
+            poll();
+
+            if (panel.dataset.running === 'true') {
+                pollTimer = window.setInterval(poll, 3000);
+            }
+        })();
+    </script>
 @endsection

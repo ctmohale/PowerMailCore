@@ -51,6 +51,7 @@ class TemplateController extends Controller
             'key' => $template->key,
             'name' => $template->name,
             'subject' => $template->subject,
+            'type' => $template->type,
         ];
 
         if ($includeBody) {

@@ -6,6 +6,7 @@ use App\Exceptions\EmailSendException;
 use App\Models\MarketingCampaign;
 use App\Models\MarketingCampaignRecipient;
 use App\Models\MarketingContact;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class MarketingCampaignService
@@ -84,6 +85,63 @@ class MarketingCampaignService
         return $campaign->fresh(['recipients', 'emailAccount', 'emailTemplate']);
     }
 
+    public function sendQueuedRecipient(int $recipientId): void
+    {
+        $recipient = MarketingCampaignRecipient::query()
+            ->with(['campaign.emailAccount', 'campaign.emailTemplate', 'contact'])
+            ->find($recipientId);
+
+        if (! $recipient || $recipient->status !== MarketingCampaignRecipient::STATUS_PENDING) {
+            return;
+        }
+
+        $campaign = $recipient->campaign;
+        $contact = $recipient->contact;
+
+        if (! $campaign || ! $contact || $campaign->status !== MarketingCampaign::STATUS_SENDING) {
+            $this->markQueuedRecipientFailed($recipient, 'Campaign or contact is no longer available.');
+
+            return;
+        }
+
+        try {
+            $log = $this->sendToContact($campaign, $contact);
+
+            DB::transaction(function () use ($recipient, $log): void {
+                $freshRecipient = MarketingCampaignRecipient::query()
+                    ->whereKey($recipient->id)
+                    ->where('status', MarketingCampaignRecipient::STATUS_PENDING)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (! $freshRecipient) {
+                    return;
+                }
+
+                $freshRecipient->forceFill([
+                    'email_log_id' => $log->id,
+                    'status' => MarketingCampaignRecipient::STATUS_SENT,
+                    'error_message' => null,
+                    'sent_at' => now(),
+                ])->save();
+
+                MarketingCampaign::query()
+                    ->whereKey($freshRecipient->marketing_campaign_id)
+                    ->increment('sent_count');
+            });
+        } catch (EmailSendException $exception) {
+            $this->markQueuedRecipientFailed(
+                $recipient,
+                $exception->emailLog?->error_message ?: $exception->getMessage(),
+                $exception->emailLog?->id,
+            );
+        } catch (Throwable $exception) {
+            $this->markQueuedRecipientFailed($recipient, $exception->getMessage());
+        }
+
+        $this->finalizeQueuedCampaignIfComplete($campaign->id);
+    }
+
     private function sendToContact(MarketingCampaign $campaign, MarketingContact $contact)
     {
         $data = $this->dataForContact($campaign, $contact);
@@ -133,6 +191,49 @@ class MarketingCampaignService
         ];
 
         return array_merge($campaign->template_data ?? [], $contact->metadata ?? [], $contactData);
+    }
+
+    private function markQueuedRecipientFailed(MarketingCampaignRecipient $recipient, string $message, ?int $emailLogId = null): void
+    {
+        DB::transaction(function () use ($recipient, $message, $emailLogId): void {
+            $freshRecipient = MarketingCampaignRecipient::query()
+                ->whereKey($recipient->id)
+                ->where('status', MarketingCampaignRecipient::STATUS_PENDING)
+                ->lockForUpdate()
+                ->first();
+
+            if (! $freshRecipient) {
+                return;
+            }
+
+            $freshRecipient->forceFill([
+                'email_log_id' => $emailLogId,
+                'status' => MarketingCampaignRecipient::STATUS_FAILED,
+                'error_message' => $message,
+            ])->save();
+
+            MarketingCampaign::query()
+                ->whereKey($freshRecipient->marketing_campaign_id)
+                ->increment('failed_count');
+        });
+    }
+
+    private function finalizeQueuedCampaignIfComplete(int $campaignId): void
+    {
+        $campaign = MarketingCampaign::query()->find($campaignId);
+
+        if (! $campaign || $campaign->status !== MarketingCampaign::STATUS_SENDING) {
+            return;
+        }
+
+        $processed = (int) $campaign->sent_count + (int) $campaign->failed_count;
+
+        if ($campaign->total_recipients > 0 && $processed >= $campaign->total_recipients) {
+            $campaign->forceFill([
+                'status' => $this->campaignStatus((int) $campaign->sent_count, (int) $campaign->failed_count),
+                'finished_at' => now(),
+            ])->save();
+        }
     }
 
     private function campaignStatus(int $sent, int $failed): string

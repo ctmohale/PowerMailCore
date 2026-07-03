@@ -12,7 +12,10 @@
     </div>
 
     @if (session('plain_api_key'))
-        <div class="key-box">{{ session('plain_api_key') }}</div>
+        <div class="key-box" id="new-api-key">{{ session('plain_api_key') }}</div>
+        <div class="actions" style="margin-top: -8px; margin-bottom: 18px;">
+            <button class="secondary tiny" type="button" data-copy-target="new-api-key">Copy New Key</button>
+        </div>
     @endif
 
     <details class="panel">
@@ -134,6 +137,7 @@
                             <td><span class="badge {{ $apiKey->is_active ? 'active' : 'failed' }}">{{ $apiKey->is_active ? 'Active' : 'Inactive' }}</span></td>
                             <td class="actions-cell">
                                 <div class="inline-actions">
+                                    <button class="secondary tiny" type="button" data-open-dialog="view-api-key-{{ $apiKey->id }}">View</button>
                                     <button class="secondary tiny" type="button" data-open-dialog="edit-api-key-{{ $apiKey->id }}">Edit</button>
                                     <form method="POST" action="{{ route('api-keys.destroy', $apiKey) }}" data-confirm="Delete API key {{ $apiKey->name }}? Connected apps using it will stop sending email.">
                                         @csrf
@@ -141,6 +145,43 @@
                                         <button class="danger tiny" type="submit">Delete</button>
                                     </form>
                                 </div>
+                                <dialog class="edit-dialog" id="view-api-key-{{ $apiKey->id }}">
+                                    <div class="edit-dialog-body">
+                                        <h2>View API Key</h2>
+                                        <p>{{ $apiKey->name }}. Keep this key on your server only.</p>
+                                        <div class="form-grid" style="margin-top: 18px;">
+                                            <div class="field">
+                                                <label>Client</label>
+                                                <input value="{{ $apiKey->client?->name }}" readonly>
+                                            </div>
+                                            <div class="field">
+                                                <label>Prefix</label>
+                                                <input value="{{ $apiKey->key_prefix }}" readonly>
+                                            </div>
+                                            <div class="field full">
+                                                <label for="api_key_plain_{{ $apiKey->id }}">API Key</label>
+                                                @if ($apiKey->plain_text_key)
+                                                    <input id="api_key_plain_{{ $apiKey->id }}" type="password" value="{{ $apiKey->plain_text_key }}" readonly data-secret-field>
+                                                    <div class="inline-actions" style="margin-top: 10px;">
+                                                        <button class="secondary tiny" type="button" data-toggle-secret="api_key_plain_{{ $apiKey->id }}">Show</button>
+                                                        <button class="secondary tiny" type="button" data-copy-target="api_key_plain_{{ $apiKey->id }}">Copy</button>
+                                                    </div>
+                                                @else
+                                                    <input value="Full key is not available for older keys. Create a new key to use View." readonly>
+                                                    <p class="muted" style="margin: 10px 0 0;">Regenerate this key to create a new full key you can view and copy.</p>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="edit-dialog-actions">
+                                        <button class="secondary" type="button" data-close-dialog>Close</button>
+                                        <form method="POST" action="{{ route('api-keys.regenerate', $apiKey) }}" data-confirm="Regenerate API key {{ $apiKey->name }}? The current key will stop working until connected apps use the new key.">
+                                            @csrf
+                                            @method('PATCH')
+                                            <button class="danger" type="submit">Regenerate Key</button>
+                                        </form>
+                                    </div>
+                                </dialog>
                                 <dialog class="edit-dialog" id="edit-api-key-{{ $apiKey->id }}">
                                     <form method="POST" action="{{ route('api-keys.update', $apiKey) }}">
                                         @csrf
@@ -181,8 +222,18 @@
                                         </div>
                                         <div class="edit-dialog-actions">
                                             <button class="secondary" type="button" data-close-dialog>Cancel</button>
+                                            <button class="danger" type="submit" form="regenerate-api-key-{{ $apiKey->id }}">Regenerate Key</button>
                                             <button type="submit">Save</button>
                                         </div>
+                                    </form>
+                                    <form
+                                        id="regenerate-api-key-{{ $apiKey->id }}"
+                                        method="POST"
+                                        action="{{ route('api-keys.regenerate', $apiKey) }}"
+                                        data-confirm="Regenerate API key {{ $apiKey->name }}? The current key will stop working until connected apps use the new key."
+                                    >
+                                        @csrf
+                                        @method('PATCH')
                                     </form>
                                 </dialog>
                             </td>
@@ -196,4 +247,45 @@
             </table>
         </div>
     </section>
+
+    <script>
+        (() => {
+            document.addEventListener('click', async (event) => {
+                const toggle = event.target.closest('[data-toggle-secret]');
+                const copy = event.target.closest('[data-copy-target]');
+
+                if (toggle) {
+                    const field = document.getElementById(toggle.dataset.toggleSecret);
+
+                    if (!field) {
+                        return;
+                    }
+
+                    const showing = field.type === 'text';
+                    field.type = showing ? 'password' : 'text';
+                    toggle.textContent = showing ? 'Show' : 'Hide';
+                }
+
+                if (copy) {
+                    const target = document.getElementById(copy.dataset.copyTarget);
+                    const value = target?.value ?? target?.textContent ?? '';
+
+                    if (!value.trim()) {
+                        return;
+                    }
+
+                    try {
+                        await navigator.clipboard.writeText(value.trim());
+                        const original = copy.textContent;
+                        copy.textContent = 'Copied';
+                        window.setTimeout(() => {
+                            copy.textContent = original;
+                        }, 1400);
+                    } catch (error) {
+                        copy.textContent = 'Copy failed';
+                    }
+                }
+            });
+        })();
+    </script>
 @endsection

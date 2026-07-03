@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Exceptions\EmailSendException;
+use App\Jobs\DispatchMarketingCampaignJob;
 use App\Http\Controllers\Concerns\ScopesTenantData;
 use App\Http\Controllers\Controller;
 use App\Models\EmailAccount;
@@ -10,10 +11,10 @@ use App\Models\EmailLog;
 use App\Models\EmailTemplate;
 use App\Models\MarketingCampaign;
 use App\Models\MarketingContact;
-use App\Services\MarketingCampaignService;
 use App\Services\MarketingContactImportService;
 use App\Services\SendEmailService;
 use App\Services\TemplateRenderer;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -60,6 +61,25 @@ class MarketingController extends Controller
             $campaign->setAttribute('display_failed_count', $this->campaignFailedCount($campaign));
         });
 
+        $accounts = $this->scopeEmailAccounts(EmailAccount::query())
+            ->with('client')
+            ->where('is_active', true)
+            ->orderBy('email')
+            ->get();
+        $templates = $this->scopeClient(EmailTemplate::query())
+            ->with('client')
+            ->where('is_active', true)
+            ->where('type', EmailTemplate::TYPE_MARKETING)
+            ->orderBy('name')
+            ->get();
+        $sendableAccountCountsByClient = $accounts
+            ->filter(fn (EmailAccount $account): bool => $account->hasUsableSmtpPassword())
+            ->countBy(fn (EmailAccount $account): int => (int) $account->client_id);
+        $contactStatusCounts = $this->scopeClient(MarketingContact::query())
+            ->selectRaw('status, COUNT(*) as aggregate')
+            ->groupBy('status')
+            ->pluck('aggregate', 'status');
+
         return view('admin.marketing.index', [
             'clients' => $this->clientsForUser(),
             'contacts' => $contactsQuery
@@ -67,21 +87,16 @@ class MarketingController extends Controller
                 ->paginate(25)
                 ->withQueryString(),
             'campaigns' => $campaigns,
-            'accounts' => $this->scopeEmailAccounts(EmailAccount::query())
-                ->with('client')
-                ->where('is_active', true)
-                ->orderBy('email')
-                ->get(),
-            'templates' => $this->scopeClient(EmailTemplate::query())
-                ->with('client')
-                ->where('is_active', true)
-                ->orderBy('name')
-                ->get(),
+            'accounts' => $accounts,
+            'accountsByClient' => $accounts->groupBy('client_id'),
+            'sendableAccountCountsByClient' => $sendableAccountCountsByClient,
+            'templates' => $templates,
+            'templatesByClient' => $templates->groupBy('client_id'),
             'tags' => $this->availableTags(),
             'stats' => [
-                'contacts' => $this->scopeClient(MarketingContact::query())->count(),
-                'subscribed' => $this->scopeClient(MarketingContact::query())->where('status', MarketingContact::STATUS_SUBSCRIBED)->count(),
-                'unsubscribed' => $this->scopeClient(MarketingContact::query())->where('status', MarketingContact::STATUS_UNSUBSCRIBED)->count(),
+                'contacts' => (int) $contactStatusCounts->sum(),
+                'subscribed' => (int) ($contactStatusCounts[MarketingContact::STATUS_SUBSCRIBED] ?? 0),
+                'unsubscribed' => (int) ($contactStatusCounts[MarketingContact::STATUS_UNSUBSCRIBED] ?? 0),
                 'campaigns' => $this->scopeClient(MarketingCampaign::query())->count(),
             ],
             'analytics' => $this->marketingAnalytics(),
@@ -212,6 +227,7 @@ class MarketingController extends Controller
             ? EmailTemplate::query()
                 ->where('client_id', $marketingContact->client_id)
                 ->where('is_active', true)
+                ->where('type', EmailTemplate::TYPE_MARKETING)
                 ->findOrFail($validated['email_template_id'])
             : null;
 
@@ -277,7 +293,7 @@ class MarketingController extends Controller
             ->with('email_log_id', $log->id);
     }
 
-    public function storeCampaign(Request $request, MarketingCampaignService $campaignSender): RedirectResponse
+    public function storeCampaign(Request $request): RedirectResponse
     {
         if (! $this->isAdmin()) {
             $request->merge(['client_id' => $this->currentClientId()]);
@@ -304,6 +320,7 @@ class MarketingController extends Controller
             ? EmailTemplate::query()
                 ->where('client_id', $clientId)
                 ->where('is_active', true)
+                ->where('type', EmailTemplate::TYPE_MARKETING)
                 ->findOrFail($validated['email_template_id'])
             : null;
 
@@ -341,11 +358,11 @@ class MarketingController extends Controller
         ]);
 
         if ($request->boolean('send_now')) {
-            $campaign = $campaignSender->send($campaign);
+            DispatchMarketingCampaignJob::dispatch($campaign->id)->onQueue('marketing');
 
             return redirect()
                 ->route('marketing.campaigns.show', $campaign)
-                ->with('success', "Campaign sent: {$campaign->sent_count} sent, {$campaign->failed_count} failed.");
+                ->with('success', 'Campaign queued. Delivery will continue in the background.');
         }
 
         return redirect()
@@ -362,10 +379,14 @@ class MarketingController extends Controller
         ]);
     }
 
-    public function sendCampaign(MarketingCampaign $marketingCampaign, MarketingCampaignService $campaignSender): RedirectResponse
+    public function sendCampaign(MarketingCampaign $marketingCampaign): RedirectResponse
     {
         $this->abortUnlessClientAllowed($marketingCampaign->client_id);
         $marketingCampaign->loadMissing('emailAccount');
+
+        if ($marketingCampaign->status === MarketingCampaign::STATUS_SENDING) {
+            return back()->with('success', 'Campaign is already sending in the background.');
+        }
 
         if (! $marketingCampaign->emailAccount?->hasUsableSmtpPassword()) {
             throw ValidationException::withMessages([
@@ -379,9 +400,57 @@ class MarketingController extends Controller
             ]);
         }
 
-        $campaign = $campaignSender->send($marketingCampaign);
+        DispatchMarketingCampaignJob::dispatch($marketingCampaign->id)->onQueue('marketing');
 
-        return back()->with('success', "Campaign sent: {$campaign->sent_count} sent, {$campaign->failed_count} failed.");
+        return back()->with('success', 'Campaign queued. Delivery will continue in the background.');
+    }
+
+    public function campaignStatus(MarketingCampaign $marketingCampaign): JsonResponse
+    {
+        $this->abortUnlessClientAllowed($marketingCampaign->client_id);
+
+        $marketingCampaign->refresh();
+
+        $sent = (int) $marketingCampaign->sent_count;
+        $failed = (int) $marketingCampaign->failed_count;
+        $total = (int) $marketingCampaign->total_recipients;
+        $processed = min($total, $sent + $failed);
+        $pending = max(0, $total - $processed);
+        $elapsedSeconds = $marketingCampaign->started_at
+            ? max(1, $marketingCampaign->started_at->diffInSeconds($marketingCampaign->finished_at ?: now()))
+            : 0;
+        $ratePerMinute = $elapsedSeconds > 0 ? round(($processed / $elapsedSeconds) * 60, 1) : 0.0;
+        $etaSeconds = $ratePerMinute > 0 && $pending > 0
+            ? (int) ceil(($pending / $ratePerMinute) * 60)
+            : null;
+        $recentFailures = $marketingCampaign->recipients()
+            ->where('status', \App\Models\MarketingCampaignRecipient::STATUS_FAILED)
+            ->latest()
+            ->limit(3)
+            ->get(['email', 'error_message'])
+            ->map(fn ($recipient): array => [
+                'email' => $recipient->email,
+                'error' => $recipient->error_message,
+            ])
+            ->values();
+
+        return response()->json([
+            'id' => $marketingCampaign->id,
+            'status' => $marketingCampaign->status,
+            'status_label' => ucfirst($marketingCampaign->status),
+            'total' => $total,
+            'sent' => $sent,
+            'failed' => $failed,
+            'processed' => $processed,
+            'pending' => $pending,
+            'percent' => $total > 0 ? min(100, round(($processed / $total) * 100)) : 0,
+            'rate_per_minute' => $ratePerMinute,
+            'eta_seconds' => $etaSeconds,
+            'eta_label' => $this->etaLabel($etaSeconds),
+            'is_running' => $marketingCampaign->status === MarketingCampaign::STATUS_SENDING,
+            'finished_at' => $marketingCampaign->finished_at?->format('Y-m-d H:i:s'),
+            'recent_failures' => $recentFailures,
+        ]);
     }
 
     /**
@@ -397,6 +466,21 @@ class MarketingController extends Controller
             ->sort()
             ->values()
             ->all();
+    }
+
+    private function etaLabel(?int $seconds): string
+    {
+        if ($seconds === null) {
+            return 'Calculating';
+        }
+
+        if ($seconds < 60) {
+            return $seconds.' sec';
+        }
+
+        $minutes = (int) ceil($seconds / 60);
+
+        return $minutes.' min';
     }
 
     /**

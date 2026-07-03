@@ -25,6 +25,7 @@ class ApiKey extends Model
         'name',
         'key_prefix',
         'key_hash',
+        'plain_text_key',
         'abilities',
         'is_active',
         'last_used_at',
@@ -32,11 +33,13 @@ class ApiKey extends Model
 
     protected $hidden = [
         'key_hash',
+        'plain_text_key',
     ];
 
     protected function casts(): array
     {
         return [
+            'plain_text_key' => 'encrypted',
             'abilities' => 'array',
             'is_active' => 'boolean',
             'last_used_at' => 'datetime',

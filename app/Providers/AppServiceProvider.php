@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\ReceivedEmail;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -27,20 +28,26 @@ class AppServiceProvider extends ServiceProvider
             $unopenedNotificationCount = 0;
 
             if ($user instanceof User && $user->canAccess(User::PERMISSION_VIEW_INBOX)) {
-                $query = ReceivedEmail::query()->whereNull('opened_at');
+                $unopenedNotificationCount = Cache::remember(
+                    'layout.unopened_count.'.$user->id,
+                    now()->addSeconds(15),
+                    function () use ($user): int {
+                        $query = ReceivedEmail::query()->whereNull('opened_at');
 
-                if (! $user->isAdmin()) {
-                    $assignedAccountIds = $user->emailAccounts()
-                        ->pluck('email_accounts.id')
-                        ->map(fn ($id): int => (int) $id)
-                        ->all();
+                        if (! $user->isAdmin()) {
+                            $assignedAccountIds = $user->emailAccounts()
+                                ->pluck('email_accounts.id')
+                                ->map(fn ($id): int => (int) $id)
+                                ->all();
 
-                    $query
-                        ->where('client_id', $user->client_id)
-                        ->whereIn('email_account_id', $assignedAccountIds);
-                }
+                            $query
+                                ->where('client_id', $user->client_id)
+                                ->whereIn('email_account_id', $assignedAccountIds);
+                        }
 
-                $unopenedNotificationCount = $query->count();
+                        return $query->count();
+                    },
+                );
             }
 
             $view->with('unopenedNotificationCount', $unopenedNotificationCount);

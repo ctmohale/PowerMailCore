@@ -40,6 +40,7 @@ class ApiKeyController extends Controller
             'name' => $validated['name'],
             'key_prefix' => ApiKey::prefixFor($plainTextKey),
             'key_hash' => ApiKey::hashKey($plainTextKey),
+            'plain_text_key' => $plainTextKey,
             'abilities' => array_values($validated['abilities']),
             'is_active' => true,
         ]);
@@ -67,6 +68,22 @@ class ApiKeyController extends Controller
         ]);
 
         return back()->with('success', 'API key updated.');
+    }
+
+    public function regenerate(ApiKey $apiKey): RedirectResponse
+    {
+        $plainTextKey = ApiKey::makePlainTextKey();
+
+        $apiKey->forceFill([
+            'key_prefix' => ApiKey::prefixFor($plainTextKey),
+            'key_hash' => ApiKey::hashKey($plainTextKey),
+            'plain_text_key' => $plainTextKey,
+            'last_used_at' => null,
+        ])->save();
+
+        return back()
+            ->with('success', 'API key regenerated. Update any connected apps with the new key.')
+            ->with('plain_api_key', $plainTextKey);
     }
 
     public function destroy(ApiKey $apiKey): RedirectResponse

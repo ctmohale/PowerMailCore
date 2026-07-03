@@ -222,9 +222,7 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                                         $lastEmailAt = $contact->email_logs_max_created_at
                                             ? \Illuminate\Support\Carbon::parse($contact->email_logs_max_created_at)->format('Y-m-d H:i')
                                             : '-';
-                                        $contactSendableAccountCount = $accounts
-                                            ->filter(fn ($account) => (int) $account->client_id === (int) $contact->client_id && $account->hasUsableSmtpPassword())
-                                            ->count();
+                                        $contactSendableAccountCount = (int) ($sendableAccountCountsByClient[$contact->client_id] ?? 0);
                                         $contactPreviewValues = array_merge($metadata, [
                                             'name' => $decisionMaker ?: $contact->email,
                                             'first_name' => $contact->first_name,
@@ -404,7 +402,7 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                                                                         <label for="contact_email_account_id_{{ $contact->id }}">From</label>
                                                                         <select id="contact_email_account_id_{{ $contact->id }}" name="email_account_id" required>
                                                                             <option value="">Select sender</option>
-                                                                            @foreach ($accounts->where('client_id', $contact->client_id) as $account)
+                                                                            @foreach (($accountsByClient[$contact->client_id] ?? collect()) as $account)
                                                                                 @php($canUseContactAccount = $account->hasUsableSmtpPassword())
                                                                                 <option value="{{ $account->id }}" @selected(old('email_account_id') == $account->id) @disabled(! $canUseContactAccount)>
                                                                                     {{ $account->email }}{{ $canUseContactAccount ? '' : ' | Needs SMTP password' }}
@@ -416,7 +414,7 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                                                                         <label for="contact_email_template_id_{{ $contact->id }}">Template</label>
                                                                         <select id="contact_email_template_id_{{ $contact->id }}" name="email_template_id" data-compose-template>
                                                                             <option value="">No template</option>
-                                                                            @foreach ($templates->where('client_id', $contact->client_id) as $template)
+                                                                            @foreach (($templatesByClient[$contact->client_id] ?? collect()) as $template)
                                                                                 <option value="{{ $template->id }}" @selected(old('email_template_id') == $template->id)>{{ $template->name }}</option>
                                                                             @endforeach
                                                                         </select>
@@ -544,7 +542,12 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                                             <div class="muted">{{ $campaign->subject }}</div>
                                         </td>
                                         <td>{{ $campaign->recipient_tag ?: 'All subscribed' }}</td>
-                                        <td><span class="badge">{{ ucfirst($campaign->status) }}</span></td>
+                                        <td>
+                                            <span class="badge {{ $campaign->status }}">{{ ucfirst($campaign->status) }}</span>
+                                            @if ($campaign->status === \App\Models\MarketingCampaign::STATUS_SENDING)
+                                                <div class="muted">Queued background send</div>
+                                            @endif
+                                        </td>
                                         <td>{{ number_format($campaign->display_sent_count ?? $campaign->sent_count) }} / {{ number_format($campaign->total_recipients) }}</td>
                                         <td>{{ number_format($campaign->display_opened_count ?? 0) }}</td>
                                         <td>{{ number_format($campaign->display_failed_count ?? $campaign->failed_count) }}</td>

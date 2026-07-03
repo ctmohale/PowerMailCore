@@ -56,6 +56,7 @@ class DatabaseSeeder extends Seeder
                 [
                     'name' => 'Welcome Email',
                     'subject' => 'Welcome to '.$client->name.', {{ name }}',
+                    'type' => EmailTemplate::TYPE_COMMUNICATION,
                     'body_html' => '<div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;padding:24px;"><h1>Hello {{ name }}</h1><div>{{ body }}</div><p style="color:#6b7280;font-size:12px;">'.$client->name.'</p></div>',
                     'body_text' => "Hello {{ name }},\n\n{{ body }}\n\n".$client->name,
                     'is_active' => true,
