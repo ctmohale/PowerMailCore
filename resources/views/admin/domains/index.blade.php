@@ -17,7 +17,22 @@
                 <h2>Domain List</h2>
                 <p>{{ $domains->count() }} domain{{ $domains->count() === 1 ? '' : 's' }} registered.</p>
             </div>
-            <button type="button" data-open-dialog="create-domain-dialog">Add Domain</button>
+            <div class="panel-header-actions">
+                <form class="table-filter-bar" method="GET" action="{{ route('domains.index') }}" data-auto-submit-filter>
+                    <div class="field">
+                        <select id="client_id" name="client_id">
+                            <option value="">All companies</option>
+                            @foreach ($clients as $client)
+                                <option value="{{ $client->id }}" @selected((string) $selectedClientId === (string) $client->id)>{{ $client->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="table-filter-actions">
+                        <a class="button secondary" href="{{ route('domains.index') }}">Reset</a>
+                    </div>
+                </form>
+                <button type="button" data-open-dialog="create-domain-dialog">Add Domain</button>
+            </div>
         </div>
 
         <dialog class="edit-dialog" id="create-domain-dialog" data-auto-open="{{ old('_dialog') === 'create-domain-dialog' ? 'true' : 'false' }}">

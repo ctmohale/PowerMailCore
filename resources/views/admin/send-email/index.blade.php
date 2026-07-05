@@ -65,7 +65,7 @@
         <div class="compose-mail-header">
             <span>New Message</span>
         </div>
-        <form method="POST" action="{{ route('send-email.store') }}">
+        <form method="POST" action="{{ route('send-email.store') }}" enctype="multipart/form-data">
             @csrf
             <div class="compose-mail-body">
                 <div class="send-compose-layout" data-compose-preview>
@@ -111,6 +111,11 @@
                                 <label for="message_body">Message</label>
                             </div>
                             <textarea id="message_body" name="message_body" placeholder="Write your email here." data-compose-message>{{ old('message_body') }}</textarea>
+                        </div>
+
+                        <div class="compose-line">
+                            <label for="attachments">Attach</label>
+                            <input id="attachments" name="attachments[]" type="file" multiple>
                         </div>
 
                         <textarea id="data_json" name="data_json" hidden>{{ old('data_json') }}</textarea>

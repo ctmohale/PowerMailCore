@@ -17,7 +17,24 @@
                 <h2>Account List</h2>
                 <p>{{ $accounts->count() }} account{{ $accounts->count() === 1 ? '' : 's' }} configured.</p>
             </div>
-            <button type="button" data-open-dialog="create-account-dialog">Add Account</button>
+            <div class="panel-header-actions">
+                @if (auth()->user()->isAdmin())
+                    <form class="table-filter-bar" method="GET" action="{{ route('email-accounts.index') }}" data-auto-submit-filter>
+                        <div class="field">
+                            <select id="client_id" name="client_id">
+                                <option value="">All companies</option>
+                                @foreach ($clients as $client)
+                                    <option value="{{ $client->id }}" @selected((string) $selectedClientId === (string) $client->id)>{{ $client->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="table-filter-actions">
+                            <a class="button secondary" href="{{ route('email-accounts.index') }}">Reset</a>
+                        </div>
+                    </form>
+                @endif
+                <button type="button" data-open-dialog="create-account-dialog">Add Account</button>
+            </div>
         </div>
 
         <dialog class="edit-dialog" id="create-account-dialog" data-auto-open="{{ old('_dialog') === 'create-account-dialog' ? 'true' : 'false' }}">

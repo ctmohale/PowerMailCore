@@ -51,7 +51,24 @@ HTML;
                 <h2>Template List</h2>
                 <p>{{ $templates->count() }} template{{ $templates->count() === 1 ? '' : 's' }} available.</p>
             </div>
-            <button type="button" data-open-dialog="create-template-dialog">Create Template</button>
+            <div class="panel-header-actions">
+                @if (auth()->user()->isAdmin())
+                    <form class="table-filter-bar" method="GET" action="{{ route('email-templates.index') }}" data-auto-submit-filter>
+                        <div class="field">
+                            <select id="client_id" name="client_id">
+                                <option value="">All companies</option>
+                                @foreach ($clients as $client)
+                                    <option value="{{ $client->id }}" @selected((string) $selectedClientId === (string) $client->id)>{{ $client->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="table-filter-actions">
+                            <a class="button secondary" href="{{ route('email-templates.index') }}">Reset</a>
+                        </div>
+                    </form>
+                @endif
+                <button type="button" data-open-dialog="create-template-dialog">Create Template</button>
+            </div>
         </div>
 
         <dialog class="edit-dialog template-dialog" id="create-template-dialog" data-auto-open="{{ old('_dialog') === 'create-template-dialog' ? 'true' : 'false' }}">
@@ -243,6 +260,7 @@ HTML;
                 email: 'preview@example.com',
                 body: '<p>This is where the compose message will appear.</p><p>Second paragraph preview.</p>',
                 message: '<p>This is where the compose message will appear.</p><p>Second paragraph preview.</p>',
+                unsubscribe_url: '#unsubscribe-preview',
             };
 
             const escapeHtml = (value) => String(value)

@@ -18,6 +18,8 @@ class SmtpMailer
         string $subject,
         string $html,
         ?string $text = null,
+        array $attachments = [],
+        ?string $listUnsubscribeUrl = null,
     ): ?string {
         $messageId = $this->messageIdFor($account);
 
@@ -29,8 +31,21 @@ class SmtpMailer
 
         $email->getHeaders()->addIdHeader('Message-ID', $messageId);
 
+        if ($listUnsubscribeUrl !== null) {
+            $email->getHeaders()->addTextHeader('List-Unsubscribe', '<'.$listUnsubscribeUrl.'>');
+            $email->getHeaders()->addTextHeader('List-Unsubscribe-Post', 'List-Unsubscribe=One-Click');
+        }
+
         if ($text !== null && $text !== '') {
             $email->text($text);
+        }
+
+        foreach ($attachments as $attachment) {
+            $email->attachFromPath(
+                (string) $attachment['path'],
+                (string) ($attachment['name'] ?? basename((string) $attachment['path'])),
+                $attachment['mime'] ?? null,
+            );
         }
 
         (new Mailer($this->transportFor($account)))->send($email);

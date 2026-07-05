@@ -29,6 +29,7 @@ class MarketingCampaign extends Model
         'subject',
         'body',
         'template_data',
+        'attachments',
         'recipient_tag',
         'status',
         'total_recipients',
@@ -42,6 +43,7 @@ class MarketingCampaign extends Model
     {
         return [
             'template_data' => 'array',
+            'attachments' => 'array',
             'total_recipients' => 'integer',
             'sent_count' => 'integer',
             'failed_count' => 'integer',

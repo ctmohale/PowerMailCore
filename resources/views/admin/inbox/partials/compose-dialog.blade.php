@@ -40,7 +40,7 @@
 
 @if ($canSendEmails)
     <dialog class="edit-dialog compose-dialog email-compose-dialog" id="compose-email-dialog" @if ($isComposeContext && $errors->any()) data-auto-open="true" @endif>
-        <form class="gmail-compose-form" method="POST" action="{{ route('send-email.store') }}">
+        <form class="gmail-compose-form" method="POST" action="{{ route('send-email.store') }}" enctype="multipart/form-data">
             @csrf
             <input type="hidden" name="compose_context" value="{{ $composeContext }}">
             <div class="gmail-compose-header">
@@ -101,6 +101,10 @@
                         </div>
 
                         <textarea id="compose_message_body" name="message_body" aria-label="Message" placeholder="Write your email here." data-compose-message>{{ $composeMessageValue }}</textarea>
+                        <div class="gmail-compose-line">
+                            <label for="compose_attachments">Attach</label>
+                            <input id="compose_attachments" name="attachments[]" type="file" multiple>
+                        </div>
                         <textarea id="compose_data_json" name="data_json" hidden>{{ $composeDataValue }}</textarea>
 
                         <div id="compose_template_data_section" class="gmail-template-fields" hidden>

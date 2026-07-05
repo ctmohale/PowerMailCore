@@ -12,6 +12,7 @@ use App\Models\ReceivedEmail;
 use App\Models\User;
 use App\Services\SmtpMailer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\URL;
 use RuntimeException;
@@ -27,7 +28,7 @@ class SendEmailApiTest extends TestCase
         {
             public array $sent = [];
 
-            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null): ?string
+            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = []): ?string
             {
                 $this->sent[] = compact('account', 'to', 'subject', 'html', 'text');
 
@@ -82,7 +83,7 @@ class SendEmailApiTest extends TestCase
     {
         $fakeMailer = new class extends SmtpMailer
         {
-            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null): ?string
+            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = []): ?string
             {
                 return 'bearer-message-id';
             }
@@ -216,7 +217,7 @@ class SendEmailApiTest extends TestCase
     {
         $fakeMailer = new class extends SmtpMailer
         {
-            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null): ?string
+            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = []): ?string
             {
                 return 'fake-message-id';
             }
@@ -313,7 +314,7 @@ class SendEmailApiTest extends TestCase
         {
             public array $sent = [];
 
-            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null): ?string
+            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = []): ?string
             {
                 $this->sent[] = compact('account', 'to', 'subject', 'html', 'text');
 
@@ -363,13 +364,63 @@ class SendEmailApiTest extends TestCase
         $this->assertSame(1, ReceivedEmail::where('mailbox_type', 'sent')->where('source', 'powermail')->count());
     }
 
+    public function test_company_user_can_send_dashboard_email_with_attachments(): void
+    {
+        $fakeMailer = new class extends SmtpMailer
+        {
+            public array $sent = [];
+
+            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = []): ?string
+            {
+                $this->sent[] = compact('account', 'to', 'subject', 'html', 'text', 'attachments');
+
+                return 'dashboard-attachment-message-id';
+            }
+        };
+
+        $this->app->instance(SmtpMailer::class, $fakeMailer);
+
+        [, $client,, $account] = $this->createSendingFixture();
+
+        $user = User::factory()->create([
+            'client_id' => $client->id,
+            'role' => User::ROLE_CLIENT_USER,
+            'permissions' => array_merge(User::defaultClientPermissions(), [
+                User::PERMISSION_SEND_EMAILS => true,
+            ]),
+        ]);
+        $user->emailAccounts()->sync([$account->id]);
+
+        $this->actingAs($user)
+            ->post('/send-email', [
+                'email_account_id' => $account->id,
+                'to' => 'client@example.com',
+                'subject' => 'Attached proposal',
+                'message_body' => 'Please see attached.',
+                'attachments' => [
+                    UploadedFile::fake()->create('proposal.pdf', 24, 'application/pdf'),
+                ],
+            ])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success', 'Your email has been sent.');
+
+        $this->assertCount(1, $fakeMailer->sent[0]['attachments']);
+        $this->assertSame('proposal.pdf', $fakeMailer->sent[0]['attachments'][0]['name']);
+        $this->assertFileExists($fakeMailer->sent[0]['attachments'][0]['path']);
+
+        $payload = EmailLog::where('provider_message_id', 'dashboard-attachment-message-id')->firstOrFail()->payload;
+
+        $this->assertSame('proposal.pdf', $payload['attachments'][0]['name']);
+    }
+
     public function test_dashboard_template_can_wrap_a_message_body_slot(): void
     {
         $fakeMailer = new class extends SmtpMailer
         {
             public array $sent = [];
 
-            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null): ?string
+            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = []): ?string
             {
                 $this->sent[] = compact('account', 'to', 'subject', 'html', 'text');
 
@@ -423,7 +474,7 @@ class SendEmailApiTest extends TestCase
         {
             public array $sent = [];
 
-            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null): ?string
+            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = []): ?string
             {
                 $this->sent[] = compact('account', 'to', 'subject', 'html', 'text');
 
@@ -541,7 +592,7 @@ class SendEmailApiTest extends TestCase
                 $this->error = 'Connection could not be established with host "ssl://mail.beestack.co.za:465": stream_socket_client(): Peer certificate CN=`cp62.domains.co.za\' did not match expected CN=`mail.beestack.co.za\'';
             }
 
-            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null): ?string
+            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = []): ?string
             {
                 throw new RuntimeException($this->error);
             }
@@ -588,7 +639,7 @@ class SendEmailApiTest extends TestCase
         {
             public function __construct(private readonly string $error) {}
 
-            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null): ?string
+            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = []): ?string
             {
                 throw new RuntimeException($this->error);
             }

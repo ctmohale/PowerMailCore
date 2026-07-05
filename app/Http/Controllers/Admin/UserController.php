@@ -15,11 +15,15 @@ use Illuminate\View\View;
 
 class UserController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
+        $selectedClientId = $request->integer('client_id') ?: null;
+
         return view('admin.users.index', [
+            'selectedClientId' => $selectedClientId,
             'users' => User::query()
                 ->with(['client', 'emailAccounts', 'defaultEmailTemplate.client'])
+                ->when($selectedClientId, fn ($query) => $query->where('client_id', $selectedClientId))
                 ->latest()
                 ->get(),
             'clients' => Client::orderBy('name')->get(),
@@ -136,6 +140,10 @@ class UserController extends Controller
 
     public function suspend(User $user): RedirectResponse
     {
+        if ($user->isAdmin()) {
+            return back()->withErrors(['user' => 'Administrator accounts cannot be suspended.']);
+        }
+
         if ($user->is(auth()->user())) {
             return back()->withErrors(['user' => 'You cannot suspend yourself.']);
         }
@@ -154,6 +162,10 @@ class UserController extends Controller
 
     public function destroy(User $user): RedirectResponse
     {
+        if ($user->isAdmin()) {
+            return back()->withErrors(['user' => 'Administrator accounts cannot be deleted.']);
+        }
+
         if ($user->is(auth()->user())) {
             return back()->withErrors(['user' => 'You cannot delete your own account.']);
         }

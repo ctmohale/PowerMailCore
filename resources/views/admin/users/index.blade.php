@@ -28,7 +28,22 @@
                 <h2>User Access</h2>
                 <p>{{ $users->count() }} user{{ $users->count() === 1 ? '' : 's' }} configured.</p>
             </div>
-            <button type="button" data-open-dialog="create-user-dialog">Add User</button>
+            <div class="panel-header-actions">
+                <form class="table-filter-bar" method="GET" action="{{ route('users.index') }}" data-auto-submit-filter>
+                    <div class="field">
+                        <select id="client_id" name="client_id">
+                            <option value="">All companies</option>
+                            @foreach ($clients as $client)
+                                <option value="{{ $client->id }}" @selected((string) $selectedClientId === (string) $client->id)>{{ $client->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="table-filter-actions">
+                        <a class="button secondary" href="{{ route('users.index') }}">Reset</a>
+                    </div>
+                </form>
+                <button type="button" data-open-dialog="create-user-dialog">Add User</button>
+            </div>
         </div>
 
         <dialog class="edit-dialog" id="create-user-dialog" data-auto-open="{{ old('_dialog') === 'create-user-dialog' ? 'true' : 'false' }}">
@@ -181,24 +196,26 @@
                             <td class="actions-cell">
                                 <div class="inline-actions">
                                     <button class="secondary tiny" type="button" data-open-dialog="edit-user-{{ $user->id }}">Edit</button>
-                                    @if ($user->status === 'active')
-                                        <form method="POST" action="{{ route('users.suspend', $user) }}" data-confirm="Suspend {{ $user->name }}? They will lose access immediately.">
+                                    @if (! $user->isAdmin())
+                                        @if ($user->status === 'active')
+                                            <form method="POST" action="{{ route('users.suspend', $user) }}" data-confirm="Suspend {{ $user->name }}? They will lose access immediately.">
+                                                @csrf
+                                                @method('PATCH')
+                                                <button class="secondary tiny" type="submit">Suspend</button>
+                                            </form>
+                                        @else
+                                            <form method="POST" action="{{ route('users.activate', $user) }}">
+                                                @csrf
+                                                @method('PATCH')
+                                                <button class="tiny" type="submit">Activate</button>
+                                            </form>
+                                        @endif
+                                        <form method="POST" action="{{ route('users.destroy', $user) }}" data-confirm="Delete {{ $user->name }}? This cannot be undone.">
                                             @csrf
-                                            @method('PATCH')
-                                            <button class="secondary tiny" type="submit">Suspend</button>
-                                        </form>
-                                    @else
-                                        <form method="POST" action="{{ route('users.activate', $user) }}">
-                                            @csrf
-                                            @method('PATCH')
-                                            <button class="tiny" type="submit">Activate</button>
+                                            @method('DELETE')
+                                            <button class="danger tiny" type="submit">Delete</button>
                                         </form>
                                     @endif
-                                    <form method="POST" action="{{ route('users.destroy', $user) }}" data-confirm="Delete {{ $user->name }}? This cannot be undone.">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button class="danger tiny" type="submit">Delete</button>
-                                    </form>
                                 </div>
                                 <dialog class="edit-dialog" id="edit-user-{{ $user->id }}">
                                     <form method="POST" action="{{ route('users.update', $user) }}">

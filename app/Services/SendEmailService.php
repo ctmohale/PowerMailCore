@@ -23,7 +23,7 @@ class SendEmailService
     /**
      * Send an email immediately and write a durable log around the SMTP attempt.
      *
-     * @param  array{from_email:string,to:string,subject?:string,template_key:string,data?:array<string,mixed>,marketing_contact_id?:int}  $payload
+     * @param  array{from_email:string,to:string,subject?:string,template_key:string,data?:array<string,mixed>,marketing_contact_id?:int,attachments?:array<int,array{path:string,name:string,mime:?string}>}  $payload
      */
     public function send(ApiKey $apiKey, array $payload): EmailLog
     {
@@ -33,7 +33,7 @@ class SendEmailService
     }
 
     /**
-     * @param  array{from_email:string,to:string,subject?:string,template_key:string,data?:array<string,mixed>,marketing_contact_id?:int}  $payload
+     * @param  array{from_email:string,to:string,subject?:string,template_key:string,data?:array<string,mixed>,marketing_contact_id?:int,attachments?:array<int,array{path:string,name:string,mime:?string}>}  $payload
      */
     public function sendForClient(int $clientId, array $payload): EmailLog
     {
@@ -41,7 +41,7 @@ class SendEmailService
     }
 
     /**
-     * @param  array{from_email:string,to:string,subject:string,message:string,marketing_contact_id?:int}  $payload
+     * @param  array{from_email:string,to:string,subject:string,message:string,marketing_contact_id?:int,attachments?:array<int,array{path:string,name:string,mime:?string}>}  $payload
      */
     public function sendPlainForClient(int $clientId, array $payload): EmailLog
     {
@@ -67,6 +67,7 @@ class SendEmailService
         $subject = trim($payload['subject']);
         $text = $payload['message'];
         $html = nl2br(e($text));
+        $attachments = $payload['attachments'] ?? [];
 
         $log = EmailLog::create([
             'client_id' => $clientId,
@@ -80,12 +81,13 @@ class SendEmailService
             'payload' => [
                 'marketing_contact_id' => $payload['marketing_contact_id'] ?? null,
                 'message' => $text,
+                'attachments' => $this->attachmentLogData($attachments),
             ],
         ]);
         $html = $this->appendOpenTrackingPixel($html, $log);
 
         try {
-            $messageId = $this->smtpMailer->send($account, $payload['to'], $subject, $html, $text);
+            $messageId = $this->smtpMailer->send($account, $payload['to'], $subject, $html, $text, $attachments);
 
             $log->forceFill([
                 'status' => EmailLog::STATUS_SENT,
@@ -108,13 +110,14 @@ class SendEmailService
     }
 
     /**
-     * @param  array{from_email:string,to:string,subject?:string,template_key:string,data?:array<string,mixed>,marketing_contact_id?:int}  $payload
+     * @param  array{from_email:string,to:string,subject?:string,template_key:string,data?:array<string,mixed>,marketing_contact_id?:int,attachments?:array<int,array{path:string,name:string,mime:?string}>}  $payload
      */
     private function sendForContext(int $clientId, array $payload, ?ApiKey $apiKey = null): EmailLog
     {
         $data = $payload['data'] ?? [];
         $fromEmail = Str::lower($payload['from_email']);
         $subjectOverride = trim((string) ($payload['subject'] ?? ''));
+        $attachments = $payload['attachments'] ?? [];
 
         $account = EmailAccount::query()
             ->with('domain')
@@ -152,6 +155,7 @@ class SendEmailService
         }
 
         $marketingContact = null;
+        $unsubscribeUrl = null;
         if ($template->isMarketing()) {
             $marketingContact = $this->marketingContactForRecipient($clientId, $payload);
             $payload['marketing_contact_id'] = $marketingContact->id;
@@ -167,6 +171,10 @@ class SendEmailService
 
                 throw new EmailSendException('Recipient has unsubscribed from marketing emails.', $log);
             }
+
+            // Generate now so {{ unsubscribe_url }} resolves correctly during template rendering.
+            $unsubscribeUrl = $this->unsubscribeUrl($marketingContact);
+            $data['unsubscribe_url'] = $unsubscribeUrl;
         }
 
         $subject = $this->renderer->render($subjectOverride !== '' ? $subjectOverride : $template->subject, $data);
@@ -176,15 +184,20 @@ class SendEmailService
             'message',
             'body_html',
             'message_html',
+            'unsubscribe_url',
         ]);
         $text = $template->body_text
             ? $this->renderer->render($template->body_text, $data)
             : trim(html_entity_decode(strip_tags(str_replace(['<br>', '<br/>', '<br />'], "\n", $html))));
 
-        if ($marketingContact) {
-            $unsubscribeUrl = $this->unsubscribeUrl($marketingContact);
-            $html = $this->appendMarketingUnsubscribeFooter($html, $unsubscribeUrl);
-            $text = $this->appendMarketingUnsubscribeText($text, $unsubscribeUrl);
+        if ($unsubscribeUrl) {
+            // Append footer only if the user hasn't already embedded the link in the template.
+            if (! str_contains($html, $unsubscribeUrl)) {
+                $html = $this->appendMarketingUnsubscribeFooter($html, $unsubscribeUrl);
+            }
+            if (! str_contains($text, $unsubscribeUrl)) {
+                $text = $this->appendMarketingUnsubscribeText($text, $unsubscribeUrl);
+            }
         }
 
         $log = EmailLog::create([
@@ -203,12 +216,13 @@ class SendEmailService
                 'template_type' => $template->type,
                 'marketing_contact_id' => $payload['marketing_contact_id'] ?? null,
                 'data' => $data,
+                'attachments' => $this->attachmentLogData($attachments),
             ],
         ]);
         $html = $this->appendOpenTrackingPixel($html, $log);
 
         try {
-            $messageId = $this->smtpMailer->send($account, $payload['to'], $subject, $html, $text);
+            $messageId = $this->smtpMailer->send($account, $payload['to'], $subject, $html, $text, $attachments);
 
             $log->forceFill([
                 'status' => EmailLog::STATUS_SENT,
@@ -297,7 +311,7 @@ class SendEmailService
     private function unsubscribeUrl(MarketingContact $contact): string
     {
         $trackingBaseUrl = rtrim((string) config('mail.tracking_url', config('app.url')), '/');
-        $path = URL::signedRoute('email-tracking.unsubscribe', [
+        $path = URL::route('email-tracking.unsubscribe', [
             'marketingContact' => $contact,
             'token' => $contact->ensureUnsubscribeToken(),
         ], absolute: false);
@@ -322,6 +336,21 @@ class SendEmailService
     private function appendMarketingUnsubscribeText(?string $text, string $unsubscribeUrl): string
     {
         return trim((string) $text)."\n\nUnsubscribe from marketing emails:\n".$unsubscribeUrl;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $attachments
+     * @return array<int, array{name:string,mime:?string}>
+     */
+    private function attachmentLogData(array $attachments): array
+    {
+        return collect($attachments)
+            ->map(fn (array $attachment): array => [
+                'name' => (string) ($attachment['name'] ?? basename((string) ($attachment['path'] ?? 'attachment'))),
+                'mime' => $attachment['mime'] ?? null,
+            ])
+            ->values()
+            ->all();
     }
 
     private function recordSentMailboxMessage(EmailAccount $account, EmailLog $log, string $html, ?string $text): void

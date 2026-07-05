@@ -11,12 +11,18 @@ use Illuminate\View\View;
 
 class ClientController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
+        $selectedClientId = $request->integer('client_id') ?: null;
+        $filterClients = Client::query()->orderBy('name')->get(['id', 'name']);
+
         return view('admin.clients.index', [
+            'filterClients' => $filterClients,
+            'selectedClientId' => $selectedClientId,
             'clients' => Client::query()
                 ->withCount(['domains', 'emailAccounts', 'emailTemplates', 'apiKeys'])
                 ->withCount('users')
+                ->when($selectedClientId, fn ($query) => $query->whereKey($selectedClientId))
                 ->latest()
                 ->get(),
         ]);

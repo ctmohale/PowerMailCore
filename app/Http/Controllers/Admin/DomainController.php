@@ -12,12 +12,16 @@ use Illuminate\View\View;
 
 class DomainController extends Controller
 {
-    public function index(): View
+    public function index(Request $request): View
     {
+        $selectedClientId = $request->integer('client_id') ?: null;
+
         return view('admin.domains.index', [
+            'selectedClientId' => $selectedClientId,
             'clients' => Client::orderBy('name')->get(),
             'domains' => Domain::query()
                 ->with('client')
+                ->when($selectedClientId, fn ($query) => $query->where('client_id', $selectedClientId))
                 ->latest()
                 ->get(),
         ]);

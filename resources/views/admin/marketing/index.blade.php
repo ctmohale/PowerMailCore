@@ -3,12 +3,145 @@
 @section('title', 'Marketing | PowerMail Core')
 
 @section('content')
+    <style>
+        /* Scoped styling for generated leads modal table. */
+        .lead-results-table {
+            font-family: Roboto, "Segoe UI", Tahoma, sans-serif;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 0.88rem;
+        }
+
+        .lead-results-table thead th {
+            color: #5f6368;
+            font-weight: 600;
+            font-size: 0.75rem;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            border-bottom: 1px solid #dadce0;
+            padding: 0.5rem 0.6rem;
+            background: #fff;
+        }
+
+        .lead-results-table tbody td {
+            color: #202124;
+            border-bottom: 1px solid #eceff1;
+            padding: 0.48rem 0.6rem;
+            line-height: 1.25;
+            vertical-align: middle;
+        }
+
+        .lead-results-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        .lead-results-table .email-cell {
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: #202124;
+        }
+
+        .lead-results-table .website-link {
+            color: #1a73e8;
+            text-decoration: none;
+            word-break: break-all;
+            font-size: 0.86rem;
+        }
+
+        .lead-results-table .website-link:hover {
+            text-decoration: underline;
+        }
+
+        .lead-meta-cell {
+            color: #5f6368;
+            font-size: 0.8rem;
+            white-space: nowrap;
+        }
+
+        .lead-modal-filter {
+            border: 1px solid #e8eaed;
+            border-radius: 12px;
+            grid-template-columns: minmax(260px, 1fr) auto auto auto;
+            margin-bottom: 0.6rem;
+            padding: 10px 12px;
+        }
+
+        .lead-modal-filter .marketing-live-controls {
+            flex-wrap: wrap;
+        }
+
+        .lead-modal-filter-actions {
+            display: inline-flex;
+            gap: 0.38rem;
+        }
+
+        .lead-bulk-actions {
+            align-items: center;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.38rem;
+            justify-content: space-between;
+            margin-bottom: 0.35rem;
+        }
+
+        .lead-bulk-select {
+            align-items: center;
+            color: var(--text-secondary);
+            display: inline-flex;
+            font-size: 0.8rem;
+            font-weight: 600;
+            gap: 0.3rem;
+            line-height: 1;
+            margin: 0;
+            padding: 0;
+        }
+
+        .lead-bulk-select > span {
+            align-items: center;
+            display: inline-flex;
+            justify-content: center;
+            line-height: 1;
+        }
+
+        .lead-bulk-select input[type="checkbox"] {
+            height: 0.88rem;
+            margin: 0;
+            min-height: 0.88rem;
+            width: 0.88rem;
+        }
+
+        .lead-bulk-delete {
+            background: #fff;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-size: 0.78rem;
+            line-height: 1.15;
+            min-height: 1.7rem;
+            padding: 0.2rem 0.5rem;
+        }
+
+        .lead-bulk-delete:hover,
+        .lead-bulk-delete:focus-visible {
+            background: #fff5f5;
+            border-color: #f5c2c7;
+            color: #b42318;
+        }
+
+        @media (max-width: 980px) {
+            .lead-modal-filter {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+
     @php
         $selectedStatus = request('status');
+        $selectedLeadStatus = request('status');
         $selectedClientId = old('client_id', request('client_id'));
+        $leadFilterActive = request()->filled('q') || request()->filled('status');
         $sendableAccountCount = $accounts->filter(fn ($account) => $account->hasUsableSmtpPassword())->count();
         $filterActive = request()->filled('q') || request()->filled('status');
-        $activeMarketingTab = in_array(request('tab'), ['campaigns', 'analytics'], true) ? request('tab') : 'contacts';
+        $activeMarketingTab = in_array(request('tab'), ['campaigns', 'analytics', 'lead-generation'], true) ? request('tab') : 'contacts';
         $contactReadiness = $stats['contacts'] > 0 ? round(($stats['subscribed'] / $stats['contacts']) * 100) : 0;
         $templatePreviewData = $templates->mapWithKeys(fn ($template) => [
             $template->id => [
@@ -16,6 +149,39 @@
                 'body_html' => $template->body_html,
             ],
         ]);
+        $volumeRows = collect($analytics['daily_volume'])->values();
+        $maxVolume = max(1, (int) $volumeRows->max(fn ($row) => $row['sent'] + $row['failed']));
+        $volumeChartWidth = 720;
+        $volumePlotTop = 22;
+        $volumePlotBottom = 190;
+        $volumePlotHeight = $volumePlotBottom - $volumePlotTop;
+        $volumeStep = $volumeRows->count() > 1 ? $volumeChartWidth / ($volumeRows->count() - 1) : $volumeChartWidth;
+        $volumePoints = $volumeRows->map(function ($row, $index) use ($maxVolume, $volumePlotBottom, $volumePlotHeight, $volumeStep) {
+            $total = $row['sent'] + $row['failed'];
+
+            return [
+                'x' => round($index * $volumeStep, 2),
+                'y' => round($volumePlotBottom - (($total / $maxVolume) * $volumePlotHeight), 2),
+                'value' => $total,
+                'sent' => $row['sent'],
+                'failed' => $row['failed'],
+                'label' => $row['label'],
+                'date' => $row['date'],
+            ];
+        });
+        $volumePath = $volumePoints->map(function ($point, $index) use ($volumePoints, $volumeStep) {
+            if ($index === 0) {
+                return 'M '.$point['x'].' '.$point['y'];
+            }
+
+            $previous = $volumePoints[$index - 1];
+            $controlOffset = $volumeStep / 2;
+
+            return 'C '.round($previous['x'] + $controlOffset, 2).' '.$previous['y'].' '.round($point['x'] - $controlOffset, 2).' '.$point['y'].' '.$point['x'].' '.$point['y'];
+        })->implode(' ');
+        $volumeArea = $volumePoints->isNotEmpty()
+            ? $volumePath.' L '.$volumePoints->last()['x'].' '.$volumePlotBottom.' L '.$volumePoints->first()['x'].' '.$volumePlotBottom.' Z'
+            : '';
     @endphp
 
     <div class="page-header mail-page-header marketing-page-header">
@@ -61,6 +227,10 @@
                     <a href="{{ route('marketing.index', ['tab' => 'campaigns']) }}" @class(['active' => $activeMarketingTab === 'campaigns'])>
                         <span>Campaigns</span>
                         <strong>{{ number_format($stats['campaigns']) }}</strong>
+                    </a>
+                    <a href="{{ route('marketing.index', ['tab' => 'lead-generation']) }}" @class(['active' => $activeMarketingTab === 'lead-generation'])>
+                        <span>Lead Generation</span>
+                        <strong>{{ number_format($leadGenerationRuns->count()) }}</strong>
                     </a>
                     <a href="{{ route('marketing.index', ['tab' => 'analytics']) }}" @class(['active' => $activeMarketingTab === 'analytics'])>
                         <span>Analytics</span>
@@ -165,7 +335,7 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                         <div class="marketing-live-search">
                             <label class="sr-only" for="contacts-live-q">Search contacts</label>
                             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-                            <input id="contacts-live-q" name="q" value="{{ request('q') }}" type="search" placeholder="Search email, name, company, phone, status">
+                            <input id="contacts-live-q" name="q" value="{{ request('q') }}" type="search" placeholder="Search email, decision maker, cell, company, sector, focus, tags, status">
                             <button class="marketing-live-clear" type="button" data-clear-live-filter aria-label="Clear search">
                                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6 6 18"/></svg>
                             </button>
@@ -281,7 +451,7 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                                                     @csrf
                                                     @method('DELETE')
                                                     <button class="mail-icon-action danger" type="submit" title="Delete {{ $contact->email }}" aria-label="Delete {{ $contact->email }}">
-                                                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 15h10l1-15"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                                                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>
                                                     </button>
                                                 </form>
                                             </div>
@@ -384,8 +554,8 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                                                     <button class="secondary" type="button" data-close-dialog>Close</button>
                                                 </div>
                                             </dialog>
-                                            <dialog class="edit-dialog compose-dialog email-compose-dialog" id="send-contact-email-{{ $contact->id }}" data-auto-open="{{ old('_dialog') === 'send-contact-email-'.$contact->id ? 'true' : 'false' }}">
-                                                <form class="gmail-compose-form" method="POST" action="{{ route('marketing.contacts.send-email', $contact) }}">
+                                            <dialog class="edit-dialog compose-dialog email-compose-dialog" id="send-contact-email-{{ $contact->id }}" data-auto-open="{{ request()->input('_dialog') === 'send-contact-email-'.$contact->id ? 'true' : 'false' }}">
+                                                <form class="gmail-compose-form" method="POST" action="{{ route('marketing.contacts.send-email', $contact) }}" enctype="multipart/form-data">
                                                     @csrf
                                                     <input type="hidden" name="_dialog" value="send-contact-email-{{ $contact->id }}">
                                                     <div class="gmail-compose-header">
@@ -403,7 +573,9 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                                                                         <select id="contact_email_account_id_{{ $contact->id }}" name="email_account_id" required>
                                                                             <option value="">Select sender</option>
                                                                             @foreach (($accountsByClient[$contact->client_id] ?? collect()) as $account)
-                                                                                @php($canUseContactAccount = $account->hasUsableSmtpPassword())
+                                                                                @php
+                                                                                    $canUseContactAccount = $account->hasUsableSmtpPassword();
+                                                                                @endphp
                                                                                 <option value="{{ $account->id }}" @selected(old('email_account_id') == $account->id) @disabled(! $canUseContactAccount)>
                                                                                     {{ $account->email }}{{ $canUseContactAccount ? '' : ' | Needs SMTP password' }}
                                                                                 </option>
@@ -430,6 +602,10 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                                                                     <input id="contact_subject_{{ $contact->id }}" name="subject" value="{{ old('subject') }}" placeholder="Use template subject" data-compose-subject>
                                                                 </div>
                                                                 <textarea id="contact_message_body_{{ $contact->id }}" name="message_body" aria-label="Message" placeholder="Write your email here." data-compose-message>{{ old('message_body') }}</textarea>
+                                                                <div class="gmail-compose-line">
+                                                                    <label for="contact_attachments_{{ $contact->id }}">Attach</label>
+                                                                    <input id="contact_attachments_{{ $contact->id }}" name="attachments[]" type="file" multiple>
+                                                                </div>
                                                             </div>
                                                             <aside class="gmail-compose-preview">
                                                                 <div class="gmail-compose-preview-head">
@@ -463,6 +639,601 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                             {{ $contacts->links() }}
                         </div>
                     </div>
+                </div>
+            @elseif ($activeMarketingTab === 'lead-generation')
+                <div class="mail-toolbar marketing-workspace-head">
+                    <div>
+                        <h2>Lead Generation</h2>
+                        <div class="mail-meta">Advanced research runs for marketing imports</div>
+                    </div>
+                    <a class="button secondary" href="{{ route('marketing.index', ['tab' => 'contacts']) }}">Audience</a>
+                </div>
+
+                <div class="marketing-tab-body">
+                    <div class="kpi-grid marketing-metrics">
+                        <div class="metric" data-tone="blue">
+                            <div class="metric-top">
+                                <span class="metric-label">Research Runs</span>
+                                <span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"/><path d="M7 3v4"/><path d="M17 3v4"/><path d="M5 7v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7"/><path d="M9 12h6"/><path d="M9 16h4"/></svg></span>
+                            </div>
+                            <strong class="metric-value">{{ number_format($leadGenerationRunsSummary->count()) }}</strong>
+                            <div class="metric-footer">
+                                <span class="trend up">Tracked</span>
+                                <span class="metric-hint">saved runs</span>
+                            </div>
+                        </div>
+                        <div class="metric" data-tone="green">
+                            <div class="metric-top">
+                                <span class="metric-label">Completed</span>
+                                <span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></span>
+                            </div>
+                            <strong class="metric-value">{{ number_format($leadGenerationRunsSummary->filter(fn ($run) => $run->status === \App\Models\MarketingLeadGenerationRun::STATUS_COMPLETED)->count()) }}</strong>
+                            <div class="metric-footer">
+                                <span class="trend up">Ready</span>
+                                <span class="metric-hint">for review</span>
+                            </div>
+                        </div>
+                        <div class="metric" data-tone="amber">
+                            <div class="metric-top">
+                                <span class="metric-label">Ready to Import</span>
+                                <span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+                            </div>
+                            <strong class="metric-value">{{ number_format($leadGenerationRunsSummary->filter(fn ($run) => $run->status === \App\Models\MarketingLeadGenerationRun::STATUS_COMPLETED && ! empty($run->leads))->count()) }}</strong>
+                            <div class="metric-footer">
+                                <span class="trend up">Qualified</span>
+                                <span class="metric-hint">lead packs</span>
+                            </div>
+                        </div>
+                        <div class="metric" data-tone="purple">
+                            <div class="metric-top">
+                                <span class="metric-label">Discovered Leads</span>
+                                <span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+                            </div>
+                            <strong class="metric-value">{{ number_format($leadGenerationRunsSummary->sum(fn ($run) => (int) ($run->discovered_count ?? 0))) }}</strong>
+                            <div class="metric-footer">
+                                <span class="trend up">Collected</span>
+                                <span class="metric-hint">from research</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form class="marketing-live-filter" method="GET" action="{{ route('marketing.index') }}" data-live-lead-filter>
+                        <input type="hidden" name="tab" value="lead-generation">
+                        <div class="marketing-live-search">
+                            <label class="sr-only" for="lead-runs-live-q">Search lead generation runs</label>
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                            <input id="lead-runs-live-q" name="q" value="{{ request('q') }}" type="search" placeholder="Search brief, industry, location, client, status">
+                        </div>
+                        <div class="marketing-live-controls" role="group" aria-label="Lead run status">
+                            <label @class(['active' => $selectedLeadStatus === null || $selectedLeadStatus === ''])>
+                                <input type="radio" name="status" value="" @checked($selectedLeadStatus === null || $selectedLeadStatus === '')>
+                                All
+                            </label>
+                            <label @class(['active' => $selectedLeadStatus === \App\Models\MarketingLeadGenerationRun::STATUS_PENDING])>
+                                <input type="radio" name="status" value="{{ \App\Models\MarketingLeadGenerationRun::STATUS_PENDING }}" @checked($selectedLeadStatus === \App\Models\MarketingLeadGenerationRun::STATUS_PENDING)>
+                                Pending
+                            </label>
+                            <label @class(['active' => $selectedLeadStatus === \App\Models\MarketingLeadGenerationRun::STATUS_RUNNING])>
+                                <input type="radio" name="status" value="{{ \App\Models\MarketingLeadGenerationRun::STATUS_RUNNING }}" @checked($selectedLeadStatus === \App\Models\MarketingLeadGenerationRun::STATUS_RUNNING)>
+                                Running
+                            </label>
+                            <label @class(['active' => $selectedLeadStatus === \App\Models\MarketingLeadGenerationRun::STATUS_COMPLETED])>
+                                <input type="radio" name="status" value="{{ \App\Models\MarketingLeadGenerationRun::STATUS_COMPLETED }}" @checked($selectedLeadStatus === \App\Models\MarketingLeadGenerationRun::STATUS_COMPLETED)>
+                                Completed
+                            </label>
+                            <label @class(['active' => $selectedLeadStatus === \App\Models\MarketingLeadGenerationRun::STATUS_FAILED])>
+                                <input type="radio" name="status" value="{{ \App\Models\MarketingLeadGenerationRun::STATUS_FAILED }}" @checked($selectedLeadStatus === \App\Models\MarketingLeadGenerationRun::STATUS_FAILED)>
+                                Failed
+                            </label>
+                        </div>
+                        <button class="secondary" type="button" data-open-dialog="compose-research-dialog">Generate Leads</button>
+                        @if ($leadFilterActive)
+                            <a class="button secondary" href="{{ route('marketing.index', ['tab' => 'lead-generation']) }}">Reset</a>
+                        @endif
+                    </form>
+
+                    <dialog class="edit-dialog" id="compose-research-dialog" data-auto-open="{{ request()->input('_dialog') === 'compose-research-dialog' ? 'true' : 'false' }}">
+                        <form class="lead-generation-form" method="POST" action="{{ route('marketing.lead-generation.store') }}">
+                            @csrf
+                            <input type="hidden" name="_dialog" value="compose-research-dialog">
+                            <input type="hidden" name="tab" value="lead-generation">
+                            <div class="edit-dialog-body">
+                                <div class="marketing-table-head">
+                                    <div>
+                                        <h3>Generate leads from pasted data</h3>
+                                        <p>Paste businesses from Google Maps, Google Search, or any directory. The system will visit each website, extract emails, phone numbers, and contact details, then build your lead list.</p>
+                                    </div>
+                                </div>
+
+                                @if (auth()->user()->isAdmin())
+                                    <div class="field" style="margin-bottom:14px">
+                                        <label for="lead_client_id">Client</label>
+                                        <select id="lead_client_id" name="client_id" required>
+                                            <option value="">Select client</option>
+                                            @foreach ($clients as $client)
+                                                <option value="{{ $client->id }}" @selected((string) $selectedClientId === (string) $client->id)>{{ $client->name }}</option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                @endif
+
+                                <div class="field lead-generation-form-field">
+                                    <label for="lead_source_data">
+                                        Paste business list
+                                        <span class="field-hint">— copy &amp; paste results from Google Maps, Google Search, or any business directory</span>
+                                    </label>
+                                    <textarea
+                                        name="source_data"
+                                        id="lead_source_data"
+                                        rows="12"
+                                        required
+                                        placeholder="Paste Google Maps or search results here. For example:
+
+Lawtons Africa
+4,3(37) · Law firm · Johannesburg · 011 286 6900
+Website  Directions
+
+Webber Wentzel
+4,6(375) · Law firm · Sandton · 011 530 5000
+Website  Directions"
+                                        style="width:100%;font-size:0.85rem;font-family:monospace;resize:vertical;"
+                                    >{{ old('source_data') }}</textarea>
+                                </div>
+
+                                <div class="lead-generation-parse-preview" data-lead-parse-preview>
+                                    <div class="lead-generation-parse-preview-head">
+                                        <strong data-parse-summary>Preview not generated yet.</strong>
+                                        <span class="muted" data-parse-hint>Click Parse Pasted Data to extract company records before enrichment.</span>
+                                    </div>
+                                    <div class="lead-generation-parse-preview-list" data-parse-list hidden></div>
+                                </div>
+
+                                <div class="lead-generation-progress" data-lead-progress hidden aria-live="polite" aria-busy="false">
+                                    <div class="lead-generation-progress-head">
+                                        <div class="lead-generation-progress-spinner" data-lead-spinner aria-hidden="true"></div>
+                                        <span data-lead-progress-title>Preparing research</span>
+                                        <strong data-lead-progress-percent>0%</strong>
+                                    </div>
+                                    <div class="lead-generation-progress-track" aria-hidden="true">
+                                        <span class="lead-generation-progress-bar" data-lead-progress-bar></span>
+                                    </div>
+                                    <ul class="lead-generation-progress-feed" data-lead-progress-feed>
+                                        <li data-progress-at="5">Parsing pasted business entries</li>
+                                        <li data-progress-at="12">Searching web for each company website</li>
+                                        <li data-progress-at="28">Scoring search results to identify official websites</li>
+                                        <li data-progress-at="44">Visiting websites and contact pages</li>
+                                        <li data-progress-at="60">Extracting emails, phones, and logos</li>
+                                        <li data-progress-at="74">AI structuring leads into import-ready rows</li>
+                                        <li data-progress-at="88">Saving lead records</li>
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="edit-dialog-actions">
+                                <button class="secondary" type="button" data-close-dialog>Cancel</button>
+                                <button class="secondary" type="button" data-parse-leads data-preview-url="{{ route('marketing.lead-generation.preview') }}">Parse Pasted Data</button>
+                                <button class="lead-research-submit" type="submit" data-find-leads disabled>Find Websites &amp; Emails</button>
+                            </div>
+                        </form>
+                    </dialog>
+
+                    <div class="table-wrap">
+                        <table class="marketing-table">
+                            <thead>
+                                <tr>
+                                    <th>Brief</th>
+                                    @if (auth()->user()->isAdmin())
+                                        <th>Client</th>
+                                    @endif
+                                    <th>Status</th>
+                                    <th>Leads</th>
+                                    <th>Finished</th>
+                                    <th>Message</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse ($leadGenerationRuns as $run)
+                                    <tr>
+                                        <td>
+                                            <strong>{{ Str::limit($run->prompt, 72) }}</strong>
+                                            <div class="muted">{{ collect([$run->industry, $run->location])->filter()->implode(' | ') ?: 'General research' }}</div>
+                                            @if (! empty($run->leads))
+                                                <div class="muted">{{ number_format(count($run->leads)) }} generated row{{ count($run->leads) === 1 ? '' : 's' }}</div>
+                                            @endif
+                                        </td>
+                                        @if (auth()->user()->isAdmin())
+                                            <td>{{ $run->client?->name ?: '-' }}</td>
+                                        @endif
+                                        <td><span class="badge {{ $run->status }}">{{ ucfirst($run->status) }}</span></td>
+                                        <td>{{ number_format($run->discovered_count) }}</td>
+                                        <td>{{ $run->finished_at?->format('Y-m-d H:i') ?: '-' }}</td>
+                                        <td>
+                                            @if (! empty($run->error_message))
+                                                <button class="mail-icon-action" type="button" data-open-dialog="run-message-{{ $run->id }}" title="View run message" aria-label="View run message">
+                                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>
+                                                </button>
+                                                <dialog class="edit-dialog marketing-run-message-dialog" id="run-message-{{ $run->id }}">
+                                                    <div class="edit-dialog-body">
+                                                        <div class="marketing-contact-dialog-head">
+                                                            <div class="marketing-contact-avatar">M</div>
+                                                            <div>
+                                                                <h2>Run message</h2>
+                                                                <p>Full details for this research run.</p>
+                                                            </div>
+                                                        </div>
+                                                        <div class="marketing-contact-dialog-section">
+                                                            <div class="marketing-run-message-box">{{ trim($run->error_message) }}</div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="edit-dialog-actions">
+                                                        <button class="secondary" type="button" data-close-dialog>Close</button>
+                                                    </div>
+                                                </dialog>
+                                            @else
+                                                <span class="muted">-</span>
+                                            @endif
+                                        </td>
+                                        <td>
+                                            <div class="inline-actions">
+                                                @php
+                                                    $hasGeneratedLeads = ! empty($run->leads);
+                                                @endphp
+
+                                                @if ($hasGeneratedLeads)
+                                                    <button class="mail-icon-action" type="button" data-open-dialog="lead-run-{{ $run->id }}" title="View generated leads" aria-label="View generated leads">
+                                                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                                                    </button>
+
+                                                    <dialog class="edit-dialog marketing-lead-dialog" id="lead-run-{{ $run->id }}" data-auto-open="{{ request()->input('_dialog') === 'lead-run-'.$run->id ? 'true' : 'false' }}">
+                                                        <div class="edit-dialog-body">
+                                                            <div class="marketing-contact-dialog-head">
+                                                                <div class="marketing-contact-avatar">L</div>
+                                                                <div>
+                                                                    <h2>Generated leads</h2>
+                                                                    <p>{{ number_format(count($run->leads)) }} lead{{ count($run->leads) === 1 ? '' : 's' }} discovered for this research run.</p>
+                                                                </div>
+                                                                <span class="badge {{ $run->status }}">{{ ucfirst($run->status) }}</span>
+                                                                <button class="mail-icon-action" type="button" data-close-dialog title="Close" aria-label="Close generated leads dialog">
+                                                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12"/><path d="M18 6 6 18"/></svg>
+                                                                </button>
+                                                            </div>
+
+                                                            <div class="marketing-contact-dialog-section">
+                                                                <div class="kpi-grid marketing-metrics marketing-modal-metrics">
+                                                                    <div class="metric" data-tone="blue">
+                                                                        <div class="metric-top">
+                                                                            <span class="metric-label">Brief</span>
+                                                                            <span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16"/><path d="M7 3v4"/><path d="M17 3v4"/><path d="M5 7v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7"/><path d="M9 12h6"/><path d="M9 16h4"/></svg></span>
+                                                                        </div>
+                                                                        <strong class="metric-value">{{ Str::limit($run->prompt, 24) }}</strong>
+                                                                        <div class="metric-footer">
+                                                                            <span class="trend up">Research</span>
+                                                                            <span class="metric-hint">brief</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div class="metric" data-tone="green">
+                                                                        <div class="metric-top">
+                                                                            <span class="metric-label">Filters</span>
+                                                                            <span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16"/><path d="M7 12h10"/><path d="M10 19h4"/></svg></span>
+                                                                        </div>
+                                                                        <strong class="metric-value">{{ collect([$run->industry, $run->location])->filter()->implode(' | ') ?: 'General' }}</strong>
+                                                                        <div class="metric-footer">
+                                                                            <span class="trend up">Targeted</span>
+                                                                            <span class="metric-hint">criteria</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div class="metric" data-tone="purple">
+                                                                        <div class="metric-top">
+                                                                            <span class="metric-label">Target</span>
+                                                                            <span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+                                                                        </div>
+                                                                        <strong class="metric-value">{{ number_format($run->target_count) }}</strong>
+                                                                        <div class="metric-footer">
+                                                                            <span class="trend up">Lead</span>
+                                                                            <span class="metric-hint">goal</span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div class="marketing-contact-dialog-section">
+                                                                @php
+                                                                    $leadEntries = collect($run->leads ?? [])->values()->map(function ($lead, $index): array {
+                                                                        return ['index' => $index, 'lead' => $lead];
+                                                                    });
+
+                                                                    $leadSearchKey = 'lead_q_'.$run->id;
+                                                                    $leadFilterKey = 'lead_filter_'.$run->id;
+                                                                    $leadGroupKey = 'lead_group_'.$run->id;
+                                                                    $leadSearch = Str::lower(trim((string) request()->input($leadSearchKey, '')));
+                                                                    $leadFilter = (string) request()->input($leadFilterKey, 'all');
+                                                                    $leadGroup = (string) request()->input($leadGroupKey, '1') === '1';
+
+                                                                    $leadEntries = $leadEntries
+                                                                        ->map(function (array $entry): array {
+                                                                            $lead = $entry['lead'];
+                                                                            $email = trim((string) ($lead['email'] ?? ''));
+                                                                            $siteUrl = trim((string) ($lead['source_url'] ?? $lead['website'] ?? ''));
+                                                                            $hasEmail = $email !== '';
+                                                                            $hasWebsite = $siteUrl !== '';
+
+                                                                            // Prioritize complete leads first.
+                                                                            $rank = $hasEmail && $hasWebsite ? 3 : ($hasEmail ? 2 : ($hasWebsite ? 1 : 0));
+
+                                                                            $entry['rank'] = $rank;
+
+                                                                            return $entry;
+                                                                        })
+                                                                        ->sort(function (array $a, array $b): int {
+                                                                            $rankCompare = $b['rank'] <=> $a['rank'];
+                                                                            if ($rankCompare !== 0) {
+                                                                                return $rankCompare;
+                                                                            }
+
+                                                                            $companyA = Str::lower((string) ($a['lead']['company'] ?? ''));
+                                                                            $companyB = Str::lower((string) ($b['lead']['company'] ?? ''));
+
+                                                                            return $companyA <=> $companyB;
+                                                                        })
+                                                                        ->values();
+
+                                                                    if ($leadGroup) {
+                                                                        $leadEntries = $leadEntries
+                                                                            ->groupBy(function (array $entry): string {
+                                                                                $lead = $entry['lead'];
+
+                                                                                return Str::lower(implode('|', [
+                                                                                    trim((string) ($lead['company'] ?? '')),
+                                                                                    trim((string) ($lead['phone'] ?? $lead['phone_number'] ?? '')),
+                                                                                    trim((string) ($lead['source_url'] ?? $lead['website'] ?? '')),
+                                                                                ]));
+                                                                            })
+                                                                            ->map(function ($group): array {
+                                                                                $best = collect($group)
+                                                                                    ->sort(function (array $a, array $b): int {
+                                                                                        $rankCompare = ($b['rank'] ?? 0) <=> ($a['rank'] ?? 0);
+                                                                                        if ($rankCompare !== 0) {
+                                                                                            return $rankCompare;
+                                                                                        }
+
+                                                                                        $emailA = trim((string) ($a['lead']['email'] ?? ''));
+                                                                                        $emailB = trim((string) ($b['lead']['email'] ?? ''));
+
+                                                                                        return strlen($emailB) <=> strlen($emailA);
+                                                                                    })
+                                                                                    ->first();
+
+                                                                                $emails = collect($group)
+                                                                                    ->map(fn (array $entry): string => trim((string) ($entry['lead']['email'] ?? '')))
+                                                                                    ->filter()
+                                                                                    ->unique()
+                                                                                    ->values();
+
+                                                                                if ($emails->count() > 1) {
+                                                                                    $otherEmails = $emails->slice(1)->implode(', ');
+                                                                                    $existingNotes = trim((string) ($best['lead']['notes'] ?? ''));
+                                                                                    $best['lead']['notes'] = trim($existingNotes.' Also: '.$otherEmails);
+                                                                                }
+
+                                                                                return $best;
+                                                                            })
+                                                                            ->values();
+                                                                    }
+
+                                                                    if ($leadSearch !== '') {
+                                                                        $leadEntries = $leadEntries->filter(function (array $entry) use ($leadSearch): bool {
+                                                                            $lead = $entry['lead'];
+                                                                            $haystack = Str::lower(implode(' ', [
+                                                                                (string) ($lead['company'] ?? ''),
+                                                                                (string) ($lead['business_category'] ?? ''),
+                                                                                (string) ($lead['location'] ?? ''),
+                                                                                (string) ($lead['years_in_business'] ?? ''),
+                                                                                (string) ($lead['decision_maker'] ?? ''),
+                                                                                (string) ($lead['email'] ?? ''),
+                                                                                (string) ($lead['phone'] ?? $lead['phone_number'] ?? ''),
+                                                                                (string) ($lead['source_url'] ?? $lead['website'] ?? ''),
+                                                                            ]));
+
+                                                                            return Str::contains($haystack, $leadSearch);
+                                                                        })->values();
+                                                                    }
+
+                                                                    if ($leadFilter !== 'all') {
+                                                                        $leadEntries = $leadEntries->filter(function (array $entry) use ($leadFilter): bool {
+                                                                            $lead = $entry['lead'];
+                                                                            $hasEmail = trim((string) ($lead['email'] ?? '')) !== '';
+                                                                            $hasWebsite = trim((string) ($lead['source_url'] ?? $lead['website'] ?? '')) !== '';
+
+                                                                            return match ($leadFilter) {
+                                                                                'has_both' => $hasEmail && $hasWebsite,
+                                                                                'has_email' => $hasEmail,
+                                                                                'has_website' => $hasWebsite,
+                                                                                'missing_contact' => ! $hasEmail,
+                                                                                default => true,
+                                                                            };
+                                                                        })->values();
+                                                                    }
+
+                                                                    $leadPage = max(1, (int) request()->input('lead_page_'.$run->id, 1));
+                                                                    $leadPerPage = 6;
+                                                                    $leadTotalPages = max(1, (int) ceil($leadEntries->count() / $leadPerPage));
+                                                                    $leadPage = min($leadPage, $leadTotalPages);
+                                                                    $leadPageItems = $leadEntries->slice(($leadPage - 1) * $leadPerPage, $leadPerPage)->values();
+                                                                @endphp
+
+                                                                <form class="marketing-live-filter lead-modal-filter" method="GET" action="{{ route('marketing.index') }}" data-live-lead-modal-filter>
+                                                                    <input type="hidden" name="tab" value="lead-generation">
+                                                                    <input type="hidden" name="_dialog" value="lead-run-{{ $run->id }}">
+                                                                    <input type="hidden" name="lead_page_{{ $run->id }}" value="1">
+                                                                    <div class="marketing-live-search">
+                                                                        <label class="sr-only" for="lead-modal-live-q-{{ $run->id }}">Search generated leads</label>
+                                                                        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                                                                        <input id="lead-modal-live-q-{{ $run->id }}" type="search" name="{{ $leadSearchKey }}" value="{{ request()->input($leadSearchKey, '') }}" placeholder="Search company, email, phone, website">
+                                                                    </div>
+                                                                    <div class="marketing-live-controls" role="group" aria-label="Generated lead quality filter">
+                                                                        <label @class(['active' => $leadFilter === 'all'])>
+                                                                            <input type="radio" name="{{ $leadFilterKey }}" value="all" @checked($leadFilter === 'all')>
+                                                                            All leads
+                                                                        </label>
+                                                                        <label @class(['active' => $leadFilter === 'has_both'])>
+                                                                            <input type="radio" name="{{ $leadFilterKey }}" value="has_both" @checked($leadFilter === 'has_both')>
+                                                                            Has email + website
+                                                                        </label>
+                                                                        <label @class(['active' => $leadFilter === 'has_email'])>
+                                                                            <input type="radio" name="{{ $leadFilterKey }}" value="has_email" @checked($leadFilter === 'has_email')>
+                                                                            Has email
+                                                                        </label>
+                                                                        <label @class(['active' => $leadFilter === 'has_website'])>
+                                                                            <input type="radio" name="{{ $leadFilterKey }}" value="has_website" @checked($leadFilter === 'has_website')>
+                                                                            Has website
+                                                                        </label>
+                                                                        <label @class(['active' => $leadFilter === 'missing_contact'])>
+                                                                            <input type="radio" name="{{ $leadFilterKey }}" value="missing_contact" @checked($leadFilter === 'missing_contact')>
+                                                                            Missing email
+                                                                        </label>
+                                                                    </div>
+                                                                    <div class="marketing-live-controls" role="group" aria-label="Duplicate grouping option">
+                                                                        <label @class(['active' => $leadGroup])>
+                                                                            <input type="checkbox" name="{{ $leadGroupKey }}" value="1" @checked($leadGroup)>
+                                                                            Group duplicates
+                                                                        </label>
+                                                                    </div>
+                                                                    <div class="lead-modal-filter-actions">
+                                                                        <button class="secondary tiny" type="submit">Apply</button>
+                                                                        <a class="button secondary tiny" href="{{ request()->fullUrlWithQuery([$leadSearchKey => null, $leadFilterKey => null, $leadGroupKey => null, 'lead_page_'.$run->id => 1, '_dialog' => 'lead-run-'.$run->id]) }}">Reset</a>
+                                                                    </div>
+                                                                </form>
+
+                                                                <form id="lead-bulk-form-{{ $run->id }}" method="POST" action="{{ route('marketing.lead-generation.leads.mass-destroy', $run) }}" data-confirm="Delete the selected leads from this run?">
+                                                                    @csrf
+                                                                    @method('DELETE')
+                                                                    <input type="hidden" name="_dialog" value="lead-run-{{ $run->id }}">
+                                                                    <div class="marketing-lead-table-actions lead-bulk-actions">
+                                                                        <label class="lead-bulk-select">
+                                                                            <span>
+                                                                                <input type="checkbox" data-lead-select-all="{{ $run->id }}">
+                                                                            </span>
+                                                                            Select all on this page
+                                                                        </label>
+                                                                        <button class="secondary tiny lead-bulk-delete" type="submit">Delete selected</button>
+                                                                    </div>
+                                                                </form>
+                                                                <div class="table-wrap">
+                                                                    <table class="marketing-table compact-table lead-results-table">
+                                                                        <thead>
+                                                                            <tr>
+                                                                                <th style="width:2.5rem;"></th>
+                                                                                <th>Company</th>
+                                                                                <th>Category</th>
+                                                                                <th>Location</th>
+                                                                                <th>Years</th>
+                                                                                <th>Decision Maker</th>
+                                                                                <th>Email</th>
+                                                                                <th>Phone</th>
+                                                                                <th>Website</th>
+                                                                                <th class="text-right">Action</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            @forelse ($leadPageItems as $leadEntry)
+                                                                                @php
+                                                                                    $lead = $leadEntry['lead'];
+                                                                                @endphp
+                                                                                <tr>
+                                                                                    <td>
+                                                                                        <input type="checkbox" name="lead_indices[]" value="{{ $leadEntry['index'] }}" form="lead-bulk-form-{{ $run->id }}" data-lead-checkbox="{{ $run->id }}">
+                                                                                    </td>
+                                                                                    <td>{{ $lead['company'] ?? '-' }}</td>
+                                                                                    <td class="lead-meta-cell">{{ $lead['business_category'] ?? '-' }}</td>
+                                                                                    <td class="lead-meta-cell">{{ $lead['location'] ?? '-' }}</td>
+                                                                                    <td class="lead-meta-cell">{{ $lead['years_in_business'] ?? '-' }}</td>
+                                                                                    <td class="lead-meta-cell">{{ $lead['decision_maker'] ?? '-' }}</td>
+                                                                                    <td class="email-cell">{{ $lead['email'] ?? '-' }}</td>
+                                                                                    <td>{{ $lead['phone'] ?? $lead['phone_number'] ?? '-' }}</td>
+                                                                                    @php $siteUrl = $lead['source_url'] ?? $lead['website'] ?? ''; @endphp
+                                                                                    <td>@if($siteUrl)<a href="{{ $siteUrl }}" target="_blank" rel="noopener" class="website-link">{{ parse_url($siteUrl, PHP_URL_HOST) ?: $siteUrl }}</a>@else-@endif</td>
+                                                                                    <td class="text-right">
+                                                                                        <form method="POST" action="{{ route('marketing.lead-generation.leads.destroy', $run) }}" data-confirm="Remove this lead from the run?">
+                                                                                            @csrf
+                                                                                            @method('DELETE')
+                                                                                            <input type="hidden" name="_dialog" value="lead-run-{{ $run->id }}">
+                                                                                            <input type="hidden" name="lead_index" value="{{ $leadEntry['index'] }}">
+                                                                                            <button class="mail-icon-action danger" type="submit" title="Remove lead" aria-label="Remove lead">
+                                                                                                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>
+                                                                                            </button>
+                                                                                        </form>
+                                                                                    </td>
+                                                                                </tr>
+                                                                            @empty
+                                                                                <tr>
+                                                                                    <td colspan="10" class="marketing-empty">No leads match these filters.</td>
+                                                                                </tr>
+                                                                            @endforelse
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                                @if ($leadTotalPages > 1)
+                                                                    <div class="marketing-pagination" style="margin-top:0.6rem; padding:10px 0 0; border-top:1px solid var(--border);">
+                                                                        <nav aria-label="Generated leads pagination">
+                                                                            @if ($leadPage > 1)
+                                                                                <a href="{{ request()->fullUrlWithQuery(['lead_page_'.$run->id => $leadPage - 1, $leadSearchKey => request()->input($leadSearchKey), $leadFilterKey => $leadFilter, $leadGroupKey => $leadGroup ? '1' : null, '_dialog' => 'lead-run-'.$run->id]) }}">Previous</a>
+                                                                            @else
+                                                                                <span class="muted">Previous</span>
+                                                                            @endif
+
+                                                                            <span class="muted">Page {{ $leadPage }} of {{ $leadTotalPages }}</span>
+
+                                                                            @if ($leadPage < $leadTotalPages)
+                                                                                <a href="{{ request()->fullUrlWithQuery(['lead_page_'.$run->id => $leadPage + 1, $leadSearchKey => request()->input($leadSearchKey), $leadFilterKey => $leadFilter, $leadGroupKey => $leadGroup ? '1' : null, '_dialog' => 'lead-run-'.$run->id]) }}">Next</a>
+                                                                            @else
+                                                                                <span class="muted">Next</span>
+                                                                            @endif
+                                                                        </nav>
+                                                                    </div>
+                                                                @endif
+                                                            </div>
+                                                        </div>
+                                                        <div class="edit-dialog-actions">
+                                                            <button class="secondary" type="button" data-close-dialog>Close</button>
+                                                        </div>
+                                                    </dialog>
+
+                                                    <form method="POST" action="{{ route('marketing.lead-generation.import', $run) }}">
+                                                        @csrf
+                                                        <button class="mail-icon-action" type="submit" title="Import generated leads" aria-label="Import generated leads">
+                                                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/><path d="M19 15v4a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-4"/></svg>
+                                                        </button>
+                                                    </form>
+
+                                                    <a class="mail-icon-action" href="{{ route('marketing.lead-generation.download', $run) }}" download title="Download CSV" aria-label="Download CSV">
+                                                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+                                                    </a>
+                                                @endif
+
+                                                <form method="POST" action="{{ route('marketing.lead-generation.destroy', $run) }}" data-confirm="Delete this lead generation run?">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button class="mail-icon-action danger" type="submit" title="Delete run" aria-label="Delete run">
+                                                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="{{ auth()->user()->isAdmin() ? 6 : 5 }}" class="marketing-empty">No lead generation runs yet.</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+
+                    @if ($leadGenerationRuns->hasPages())
+                        <div class="marketing-pagination" style="display:flex; justify-content:flex-end; margin-top:0.75rem;">
+                            {{ $leadGenerationRuns->links('pagination::simple-tailwind') }}
+                        </div>
+                    @endif
                 </div>
             @elseif ($activeMarketingTab === 'campaigns')
                 <div class="mail-toolbar marketing-workspace-head">
@@ -624,14 +1395,38 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                                 <h3>Send Volume</h3>
                                 <span>Last 7 days</span>
                             </div>
-                            <div class="analytics-bars" aria-label="Seven day send volume">
-                                @foreach ($analytics['daily_volume'] as $day)
-                                    <div class="analytics-day">
-                                        <div class="analytics-bar-track">
-                                            <span style="height: {{ max(4, $day['percent']) }}%;"></span>
-                                        </div>
-                                        <strong>{{ number_format($day['sent']) }}</strong>
-                                        <small>{{ $day['label'] }}</small>
+                            <div class="analytics-volume-chart">
+                                <svg class="chart-svg analytics-chart-svg" viewBox="0 0 720 220" preserveAspectRatio="none" role="img" aria-label="Seven day marketing send volume chart">
+                                    <defs>
+                                        <linearGradient id="marketingVolumeLine" x1="0" y1="0" x2="1" y2="0">
+                                            <stop offset="0%" stop-color="#4F6BFF"/>
+                                            <stop offset="100%" stop-color="#20C997"/>
+                                        </linearGradient>
+                                        <linearGradient id="marketingVolumeArea" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="0%" stop-color="#4F6BFF" stop-opacity="0.22"/>
+                                            <stop offset="100%" stop-color="#4F6BFF" stop-opacity="0"/>
+                                        </linearGradient>
+                                    </defs>
+
+                                    @foreach ([50, 95, 140, 185] as $gridY)
+                                        <line class="chart-grid" x1="0" y1="{{ $gridY }}" x2="720" y2="{{ $gridY }}"/>
+                                    @endforeach
+
+                                    <path class="chart-area" d="{{ $volumeArea }}" fill="url(#marketingVolumeArea)"/>
+                                    <path class="chart-line" d="{{ $volumePath }}" stroke="url(#marketingVolumeLine)"/>
+
+                                    @foreach ($volumePoints as $point)
+                                        <circle class="chart-dot" cx="{{ $point['x'] }}" cy="{{ $point['y'] }}" r="5" fill="#4F6BFF" stroke="#fff" stroke-width="3">
+                                            <title>{{ $point['label'] }} {{ $point['date'] }}: {{ $point['sent'] }} sent, {{ $point['failed'] }} failed</title>
+                                        </circle>
+                                    @endforeach
+                                </svg>
+                            </div>
+                            <div class="analytics-volume-days" aria-label="Daily marketing send totals">
+                                @foreach ($volumePoints as $point)
+                                    <div>
+                                        <strong>{{ number_format($point['sent']) }}</strong>
+                                        <span>{{ $point['label'] }}</span>
                                     </div>
                                 @endforeach
                             </div>
@@ -641,6 +1436,11 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                             <div class="analytics-card-head">
                                 <h3>Audience Health</h3>
                                 <span>{{ number_format($stats['contacts']) }} contacts</span>
+                            </div>
+                            <div class="analytics-health-stack" aria-hidden="true">
+                                @foreach ($analytics['audience_health'] as $item)
+                                    <span data-tone="{{ $item['tone'] }}" style="width: {{ $item['percent'] }}%;"></span>
+                                @endforeach
                             </div>
                             <div class="analytics-progress-list">
                                 @foreach ($analytics['audience_health'] as $item)
@@ -660,14 +1460,14 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                                 <h3>Top Tags</h3>
                                 <span>Audience groups</span>
                             </div>
-                            <div class="analytics-progress-list">
+                            <div class="analytics-tag-graph">
                                 @forelse ($analytics['top_tags'] as $tag)
-                                    <div class="analytics-progress-row">
+                                    <div class="analytics-tag-row">
                                         <div>
                                             <strong>{{ $tag['label'] }}</strong>
                                             <span>{{ number_format($tag['count']) }}</span>
                                         </div>
-                                        <div class="analytics-progress"><span style="width: {{ $tag['percent'] }}%;"></span></div>
+                                        <div class="analytics-tag-track"><span style="width: {{ $tag['percent'] }}%;"></span></div>
                                     </div>
                                 @empty
                                     <p class="analytics-empty">No tags yet.</p>
@@ -703,7 +1503,7 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
         </section>
     </div>
 
-    <dialog class="edit-dialog" id="import-contacts-dialog" data-auto-open="{{ old('_dialog') === 'import-contacts-dialog' ? 'true' : 'false' }}">
+    <dialog class="edit-dialog" id="import-contacts-dialog" data-auto-open="{{ request()->input('_dialog') === 'import-contacts-dialog' ? 'true' : 'false' }}">
         <form method="POST" action="{{ route('marketing.contacts.import') }}" enctype="multipart/form-data">
             @csrf
             <input type="hidden" name="_dialog" value="import-contacts-dialog">
@@ -735,7 +1535,7 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
         </form>
     </dialog>
 
-    <dialog class="edit-dialog" id="add-contact-dialog" data-auto-open="{{ old('_dialog') === 'add-contact-dialog' ? 'true' : 'false' }}">
+    <dialog class="edit-dialog" id="add-contact-dialog" data-auto-open="{{ request()->input('_dialog') === 'add-contact-dialog' ? 'true' : 'false' }}">
         <form method="POST" action="{{ route('marketing.contacts.store') }}">
             @csrf
             <input type="hidden" name="_dialog" value="add-contact-dialog">
@@ -779,8 +1579,8 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
         </form>
     </dialog>
 
-    <dialog class="edit-dialog compose-dialog campaign-compose-dialog" id="create-campaign-dialog" data-auto-open="{{ old('_dialog') === 'create-campaign-dialog' ? 'true' : 'false' }}">
-        <form class="gmail-compose-form" method="POST" action="{{ route('marketing.campaigns.store') }}">
+    <dialog class="edit-dialog compose-dialog campaign-compose-dialog" id="create-campaign-dialog" data-auto-open="{{ request()->input('_dialog') === 'create-campaign-dialog' ? 'true' : 'false' }}">
+        <form class="gmail-compose-form" method="POST" action="{{ route('marketing.campaigns.store') }}" enctype="multipart/form-data">
             @csrf
             <input type="hidden" name="_dialog" value="create-campaign-dialog">
             <div class="gmail-compose-header">
@@ -807,7 +1607,9 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                         <select id="campaign_email_account_id" name="email_account_id" required>
                             <option value="">Select sender</option>
                             @foreach ($accounts as $account)
-                                @php($canUseAccount = $account->hasUsableSmtpPassword())
+                                @php
+                                    $canUseAccount = $account->hasUsableSmtpPassword();
+                                @endphp
                                 <option value="{{ $account->id }}" @selected(old('email_account_id') == $account->id) @disabled(! $canUseAccount)>
                                     {{ $account->email }}{{ auth()->user()->isAdmin() ? ' | '.$account->client?->name : '' }}{{ $canUseAccount ? '' : ' | Needs SMTP password' }}
                                 </option>
@@ -845,6 +1647,10 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                     <input id="campaign_subject" name="subject" value="{{ old('subject') }}" placeholder="Hello @{{ name }}" required>
                 </div>
                 <textarea id="campaign_body" name="body" aria-label="Message" placeholder="Write the campaign message here.">{{ old('body') }}</textarea>
+                <div class="gmail-compose-line">
+                    <label for="campaign_attachments">Attach</label>
+                    <input id="campaign_attachments" name="attachments[]" type="file" multiple>
+                </div>
             </div>
             <div class="gmail-compose-footer">
                 <button class="gmail-compose-submit" type="submit" @disabled($sendableAccountCount === 0)>Create</button>
@@ -864,11 +1670,11 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
             <input type="hidden" name="tab" value="contacts">
             <div class="edit-dialog-body">
                 <h2>Advanced Contact Filter</h2>
-                <p>Search by email, name, company, phone, source, or subscription status. Results update while you type.</p>
+                <p>Search by any visible contact field. Results update while you type.</p>
                 <div class="form-grid" style="margin-top: 18px;">
                     <div class="field">
                         <label for="q">Search</label>
-                        <input id="q" name="q" value="{{ request('q') }}" placeholder="Email, name, company">
+                        <input id="q" name="q" value="{{ request('q') }}" placeholder="Email, decision maker, cell, company, sector, focus, tags, status">
                     </div>
                     <div class="field">
                         <label for="status">Status</label>
@@ -905,8 +1711,13 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
 
             const results = document.querySelector('[data-contact-results]');
             const liveForms = Array.from(document.querySelectorAll('[data-live-contact-filter]'));
+            const leadGenerationForms = Array.from(document.querySelectorAll('[data-live-lead-filter]'));
+            const leadModalFilterForms = Array.from(document.querySelectorAll('[data-live-lead-modal-filter]'));
+            const leadResearchForms = Array.from(document.querySelectorAll('.lead-generation-form'));
             const templatePreviewData = @json($templatePreviewData);
             let contactFilterTimer = null;
+            let leadGenerationFilterTimer = null;
+            let leadModalFilterTimer = null;
             let contactFilterRequest = null;
 
             const parsePreviewValues = (value) => {
@@ -1062,6 +1873,142 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                         closeDialog: form.hasAttribute('data-close-on-live-submit'),
                     });
                 });
+            });
+
+            const leadGenerationFilterUrl = (form) => {
+                const params = new URLSearchParams(new FormData(form));
+                params.set('tab', 'lead-generation');
+
+                for (const [key, value] of Array.from(params.entries())) {
+                    if (value === '') {
+                        params.delete(key);
+                    }
+                }
+
+                return `${form.action}?${params.toString()}`;
+            };
+
+            const leadModalFilterUrl = (form) => {
+                const params = new URLSearchParams(new FormData(form));
+                params.set('tab', 'lead-generation');
+
+                for (const [key, value] of Array.from(params.entries())) {
+                    if (value === '') {
+                        params.delete(key);
+                    }
+                }
+
+                return `${form.action}?${params.toString()}`;
+            };
+
+            document.querySelectorAll('[data-lead-select-all]').forEach((toggle) => {
+                const runId = toggle.dataset.leadSelectAll;
+
+                toggle.addEventListener('change', () => {
+                    document.querySelectorAll(`[data-lead-checkbox="${runId}"]`).forEach((checkbox) => {
+                        checkbox.checked = toggle.checked;
+                    });
+                });
+            });
+
+            leadGenerationForms.forEach((form) => {
+                setStatusLabels(form);
+
+                form.addEventListener('input', (event) => {
+                    if (!event.target.matches('input[type="search"], input[name="q"]')) {
+                        return;
+                    }
+
+                    window.clearTimeout(leadGenerationFilterTimer);
+                    leadGenerationFilterTimer = window.setTimeout(() => {
+                        window.location.href = leadGenerationFilterUrl(form);
+                    }, 260);
+                });
+
+                form.addEventListener('change', () => {
+                    window.clearTimeout(leadGenerationFilterTimer);
+                    window.location.href = leadGenerationFilterUrl(form);
+                });
+
+                form.addEventListener('submit', (event) => {
+                    event.preventDefault();
+                    window.clearTimeout(leadGenerationFilterTimer);
+                    window.location.href = leadGenerationFilterUrl(form);
+                });
+            });
+
+            leadModalFilterForms.forEach((form) => {
+                setStatusLabels(form);
+
+                form.addEventListener('input', (event) => {
+                    if (!event.target.matches('input[type="search"]')) {
+                        return;
+                    }
+
+                    window.clearTimeout(leadModalFilterTimer);
+                    leadModalFilterTimer = window.setTimeout(() => {
+                        window.location.href = leadModalFilterUrl(form);
+                    }, 220);
+                });
+
+                form.addEventListener('change', () => {
+                    window.clearTimeout(leadModalFilterTimer);
+                    window.location.href = leadModalFilterUrl(form);
+                });
+
+                form.addEventListener('submit', (event) => {
+                    event.preventDefault();
+                    window.clearTimeout(leadModalFilterTimer);
+                    window.location.href = leadModalFilterUrl(form);
+                });
+            });
+
+            const startLeadResearchProgress = (form) => {
+                const progress = form.querySelector('[data-lead-progress]');
+                const bar = form.querySelector('[data-lead-progress-bar]');
+                const percent = form.querySelector('[data-lead-progress-percent]');
+                const title = form.querySelector('[data-lead-progress-title]');
+                const feedItems = Array.from(form.querySelectorAll('[data-progress-at]'));
+
+                if (!progress || !bar || !percent || !title || feedItems.length === 0) {
+                    return;
+                }
+
+                let value = 4;
+                progress.hidden = false;
+                progress.setAttribute('aria-busy', 'true');
+
+                const render = () => {
+                    bar.style.width = `${value}%`;
+                    percent.textContent = `${value}%`;
+
+                    let activeItem = feedItems[0];
+                    feedItems.forEach((item) => {
+                        const threshold = Number(item.dataset.progressAt || 0);
+                        const isComplete = value > threshold + 10;
+                        const isActive = value >= threshold && !isComplete;
+
+                        item.classList.toggle('complete', isComplete);
+                        item.classList.toggle('active', isActive);
+
+                        if (value >= threshold) {
+                            activeItem = item;
+                        }
+                    });
+
+                    title.textContent = activeItem.textContent || 'Research in progress';
+                };
+
+                render();
+                window.setInterval(() => {
+                    const step = value < 40 ? 6 : value < 76 ? 4 : 2;
+                    value = Math.min(94, value + step);
+                    render();
+                }, 900);
+            };
+
+            leadResearchForms.forEach((form) => {
+                form.addEventListener('submit', () => startLeadResearchProgress(form));
             });
 
             document.querySelector('[data-clear-live-filter]')?.addEventListener('click', () => {

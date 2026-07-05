@@ -7,6 +7,7 @@ use App\Models\MarketingCampaign;
 use App\Models\MarketingCampaignRecipient;
 use App\Models\MarketingContact;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Throwable;
 
 class MarketingCampaignService
@@ -145,6 +146,7 @@ class MarketingCampaignService
     private function sendToContact(MarketingCampaign $campaign, MarketingContact $contact)
     {
         $data = $this->dataForContact($campaign, $contact);
+        $attachments = $this->storedAttachmentsForSending($campaign->attachments ?? []);
 
         if ($campaign->emailTemplate) {
             return $this->sender->sendForClient($campaign->client_id, [
@@ -154,6 +156,7 @@ class MarketingCampaignService
                 'template_key' => $campaign->emailTemplate->key,
                 'marketing_contact_id' => $contact->id,
                 'data' => $data,
+                'attachments' => $attachments,
             ]);
         }
 
@@ -163,7 +166,33 @@ class MarketingCampaignService
             'subject' => $this->renderer->render($campaign->subject, $data),
             'message' => $this->renderer->render((string) $campaign->body, $data),
             'marketing_contact_id' => $contact->id,
+            'attachments' => $attachments,
         ]);
+    }
+
+    /**
+     * @param  array<int, array{path?:string,name?:string,mime?:string|null}>  $attachments
+     * @return array<int, array{path:string,name:string,mime?:string|null}>
+     */
+    private function storedAttachmentsForSending(array $attachments): array
+    {
+        return collect($attachments)
+            ->map(function (array $attachment): ?array {
+                $path = (string) ($attachment['path'] ?? '');
+
+                if ($path === '' || ! Storage::exists($path)) {
+                    return null;
+                }
+
+                return [
+                    'path' => Storage::path($path),
+                    'name' => (string) ($attachment['name'] ?? basename($path)),
+                    'mime' => $attachment['mime'] ?? null,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
     }
 
     /**

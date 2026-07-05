@@ -3,15 +3,19 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Exceptions\EmailSendException;
-use App\Jobs\DispatchMarketingCampaignJob;
+use App\Http\Controllers\Concerns\HandlesEmailAttachments;
 use App\Http\Controllers\Concerns\ScopesTenantData;
 use App\Http\Controllers\Controller;
+use App\Jobs\DispatchMarketingCampaignJob;
 use App\Models\EmailAccount;
 use App\Models\EmailLog;
 use App\Models\EmailTemplate;
 use App\Models\MarketingCampaign;
 use App\Models\MarketingContact;
+use App\Models\MarketingLeadGenerationRun;
+use App\Services\GoogleBusinessTextParserService;
 use App\Services\MarketingContactImportService;
+use App\Services\MarketingLeadGenerationService;
 use App\Services\SendEmailService;
 use App\Services\TemplateRenderer;
 use Illuminate\Http\JsonResponse;
@@ -21,29 +25,55 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class MarketingController extends Controller
 {
+    use HandlesEmailAttachments;
     use ScopesTenantData;
 
     public function index(Request $request): View
     {
+        $leadGenerationRunsQuery = $this->scopeClient(MarketingLeadGenerationRun::query())
+            ->with(['client', 'user'])
+            ->when($request->filled('q'), function ($query) use ($request): void {
+                $search = trim((string) $request->input('q'));
+                $searchLike = "%{$search}%";
+
+                $query->where(function ($query) use ($searchLike): void {
+                    $query->where('prompt', 'like', $searchLike)
+                        ->orWhere('industry', 'like', $searchLike)
+                        ->orWhere('location', 'like', $searchLike)
+                        ->orWhere('status', 'like', $searchLike)
+                        ->orWhere('error_message', 'like', $searchLike)
+                        ->orWhere('keywords', 'like', $searchLike)
+                        ->orWhereRaw('CAST(leads AS CHAR) LIKE ?', [$searchLike])
+                        ->orWhereHas('client', function ($clientQuery) use ($searchLike): void {
+                            $clientQuery->where('name', 'like', $searchLike);
+                        });
+                });
+            })
+            ->when($request->filled('status'), fn ($query) => $query->where('status', $request->input('status')));
+
         $contactsQuery = $this->scopeClient(MarketingContact::query())
             ->with('client')
             ->withCount('emailLogs')
             ->withMax('emailLogs', 'created_at')
             ->when($request->filled('q'), function ($query) use ($request): void {
                 $search = trim((string) $request->input('q'));
+                $searchLike = "%{$search}%";
 
-                $query->where(function ($query) use ($search): void {
-                    $query->where('email', 'like', "%{$search}%")
-                        ->orWhere('name', 'like', "%{$search}%")
-                        ->orWhere('first_name', 'like', "%{$search}%")
-                        ->orWhere('last_name', 'like', "%{$search}%")
-                        ->orWhere('company', 'like', "%{$search}%")
-                        ->orWhere('phone', 'like', "%{$search}%")
-                        ->orWhere('status', 'like', "%{$search}%")
-                        ->orWhere('source', 'like', "%{$search}%");
+                $query->where(function ($query) use ($searchLike): void {
+                    $query->where('email', 'like', $searchLike)
+                        ->orWhere('name', 'like', $searchLike)
+                        ->orWhere('first_name', 'like', $searchLike)
+                        ->orWhere('last_name', 'like', $searchLike)
+                        ->orWhere('company', 'like', $searchLike)
+                        ->orWhere('phone', 'like', $searchLike)
+                        ->orWhere('status', 'like', $searchLike)
+                        ->orWhere('source', 'like', $searchLike)
+                        ->orWhereRaw('CAST(tags AS CHAR) LIKE ?', [$searchLike])
+                        ->orWhereRaw('CAST(metadata AS CHAR) LIKE ?', [$searchLike]);
                 });
             })
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->input('status')));
@@ -80,6 +110,15 @@ class MarketingController extends Controller
             ->groupBy('status')
             ->pluck('aggregate', 'status');
 
+        $leadGenerationRunsPaginator = $leadGenerationRunsQuery
+            ->latest()
+            ->paginate(6)
+            ->withQueryString();
+
+        $leadGenerationRunsSummary = (clone $leadGenerationRunsQuery)
+            ->latest()
+            ->get();
+
         return view('admin.marketing.index', [
             'clients' => $this->clientsForUser(),
             'contacts' => $contactsQuery
@@ -93,6 +132,10 @@ class MarketingController extends Controller
             'templates' => $templates,
             'templatesByClient' => $templates->groupBy('client_id'),
             'tags' => $this->availableTags(),
+            'leadIndustryOptions' => $this->leadIndustryOptions(),
+            'leadCountryOptions' => $this->leadCountryOptions(),
+            'leadGenerationRuns' => $leadGenerationRunsPaginator,
+            'leadGenerationRunsSummary' => $leadGenerationRunsSummary,
             'stats' => [
                 'contacts' => (int) $contactStatusCounts->sum(),
                 'subscribed' => (int) ($contactStatusCounts[MarketingContact::STATUS_SUBSCRIBED] ?? 0),
@@ -163,6 +206,264 @@ class MarketingController extends Controller
             ->with('marketing_import_errors', array_slice($result['errors'], 0, 10));
     }
 
+    public function storeLeadGenerationRun(Request $request, MarketingLeadGenerationService $generator): RedirectResponse
+    {
+        if (! $this->isAdmin()) {
+            $request->merge(['client_id' => $this->currentClientId()]);
+        }
+
+        $validated = $request->validate([
+            'client_id' => [$this->isAdmin() ? 'required' : 'nullable', 'exists:clients,id'],
+            'prompt' => ['nullable', 'string', 'max:2000'],
+            'industry' => ['nullable', 'string', 'max:120', Rule::in($this->leadIndustryOptions())],
+            'location' => ['nullable', 'string', 'max:120', Rule::in($this->leadCountryOptions())],
+            'province' => ['nullable', 'string', 'max:120'],
+            'target_count' => ['nullable', 'integer', 'min:1', 'max:200'],
+            'keywords' => ['nullable', 'string', 'max:2000'],
+            'source_data' => ['nullable', 'string', 'max:100000'],
+        ]);
+
+        $sourceData = filled($validated['source_data'] ?? '') ? trim($validated['source_data']) : null;
+
+        if ($sourceData !== null) {
+            $parser = new GoogleBusinessTextParserService();
+            $parsedCompanies = $parser->parseGoogleBusinessText($sourceData);
+
+            if ($parsedCompanies === []) {
+                throw ValidationException::withMessages([
+                    'source_data' => 'No business records were found in the pasted text. Paste Google Maps or Google Search listing text and try again.',
+                ]);
+            }
+        }
+
+        // Require either a prompt or pasted source data
+        if (blank($validated['prompt'] ?? '') && $sourceData === null) {
+            throw ValidationException::withMessages([
+                'source_data' => 'Please paste a list of businesses or enter a research brief.',
+            ]);
+        }
+
+        if (blank(config('services.openai.key'))) {
+            throw ValidationException::withMessages([
+                'lead_generation' => 'OpenAI must be configured before running lead generation.',
+            ]);
+        }
+
+        // Auto-generate prompt from source data when none provided
+        $prompt = filled($validated['prompt'] ?? '')
+            ? $validated['prompt']
+            : 'Generate leads from pasted business list. Extract contact details for each company.';
+
+        // Auto-set target_count to something reasonable when not provided
+        $targetCount = (int) ($validated['target_count'] ?? 200);
+
+        $clientId = $this->resolveClientId((int) ($validated['client_id'] ?? 0));
+
+        $run = MarketingLeadGenerationRun::create([
+            'client_id' => $clientId,
+            'user_id' => $request->user()->id,
+            'prompt' => $prompt,
+            'industry' => $validated['industry'] ?? null,
+            'location' => $validated['location'] ?? null,
+            'province' => filled($validated['province'] ?? '') ? $validated['province'] : null,
+            'target_count' => $targetCount,
+            'keywords' => $this->keywordsFromText($validated['keywords'] ?? ''),
+            'source_urls' => [],
+            'source_data' => $sourceData,
+            'use_openai' => true,
+            'status' => MarketingLeadGenerationRun::STATUS_PENDING,
+        ]);
+
+        $run = $generator->run($run);
+
+        if ($run->status === MarketingLeadGenerationRun::STATUS_FAILED) {
+            return redirect()
+                ->route('marketing.index', ['tab' => 'lead-generation'])
+                ->withErrors(['lead_generation' => $run->error_message ?: 'Lead generation failed.']);
+        }
+
+        return redirect()
+            ->route('marketing.index', ['tab' => 'lead-generation'])
+            ->with('success', "Lead generation complete: {$run->discovered_count} lead".($run->discovered_count === 1 ? '' : 's').' found.');
+    }
+
+    public function previewLeadGenerationParse(Request $request, GoogleBusinessTextParserService $parser): JsonResponse
+    {
+        if (! $this->isAdmin()) {
+            $request->merge(['client_id' => $this->currentClientId()]);
+        }
+
+        $validated = $request->validate([
+            'client_id' => [$this->isAdmin() ? 'required' : 'nullable', 'exists:clients,id'],
+            'source_data' => ['required', 'string', 'max:100000'],
+        ]);
+
+        if ($this->isAdmin()) {
+            $this->resolveClientId((int) ($validated['client_id'] ?? 0));
+        }
+
+        $rawText = trim((string) $validated['source_data']);
+        $companies = $parser->parseGoogleBusinessText($rawText);
+
+        return response()->json([
+            'ok' => true,
+            'count' => count($companies),
+            'companies' => $companies,
+            'message' => count($companies) > 0
+                ? 'Parsed '.count($companies).' business record'.(count($companies) === 1 ? '' : 's').'.'
+                : 'No business records found in pasted text.',
+        ]);
+    }
+
+    public function importLeadGenerationRun(MarketingLeadGenerationRun $marketingLeadGenerationRun, MarketingContactImportService $importer): RedirectResponse
+    {
+        $this->abortUnlessClientAllowed($marketingLeadGenerationRun->client_id);
+
+        $result = $importer->importStructuredLeads(
+            $marketingLeadGenerationRun->client_id,
+            $marketingLeadGenerationRun->leads ?? [],
+            'lead_generation',
+        );
+
+        $marketingLeadGenerationRun->forceFill([
+            'imported_count' => (int) $marketingLeadGenerationRun->imported_count + (int) $result['created'] + (int) $result['updated'],
+        ])->save();
+
+        $message = "Import complete: {$result['created']} added, {$result['updated']} updated, {$result['skipped']} skipped.";
+
+        return redirect()
+            ->route('marketing.index', ['tab' => 'lead-generation'])
+            ->with($result['errors'] === [] ? 'success' : 'marketing_import_errors', $result['errors'] === [] ? $message : $result['errors']);
+    }
+
+    public function downloadLeadGenerationRun(MarketingLeadGenerationRun $marketingLeadGenerationRun): StreamedResponse
+    {
+        $this->abortUnlessClientAllowed($marketingLeadGenerationRun->client_id);
+
+        $filename = 'powermail-leads-'.$marketingLeadGenerationRun->id.'.csv';
+
+        return response()->streamDownload(function () use ($marketingLeadGenerationRun): void {
+            $handle = fopen('php://output', 'w');
+
+            if ($handle === false) {
+                return;
+            }
+
+            fputcsv($handle, ['Email', 'Name', 'Company', 'Phone', 'Tags', 'Source URL', 'Notes']);
+
+            foreach ($marketingLeadGenerationRun->leads ?? [] as $lead) {
+                fputcsv($handle, [
+                    $lead['email'] ?? '',
+                    $lead['name'] ?? '',
+                    $lead['company'] ?? '',
+                    $lead['phone'] ?? '',
+                    implode(', ', is_array($lead['tags'] ?? null) ? $lead['tags'] : []),
+                    $lead['source_url'] ?? '',
+                    $lead['notes'] ?? '',
+                ]);
+            }
+
+            fclose($handle);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    public function destroyLeadGenerationLead(Request $request, MarketingLeadGenerationRun $marketingLeadGenerationRun): RedirectResponse
+    {
+        $this->abortUnlessClientAllowed($marketingLeadGenerationRun->client_id);
+
+        $validated = $request->validate([
+            'lead_index' => ['required', 'integer', 'min:0'],
+        ]);
+
+        $leads = is_array($marketingLeadGenerationRun->leads) ? $marketingLeadGenerationRun->leads : [];
+        $leadIndex = (int) $validated['lead_index'];
+
+        if (! array_key_exists($leadIndex, $leads)) {
+            return redirect()
+                ->route('marketing.index', [
+                    'tab' => 'lead-generation',
+                    '_dialog' => 'lead-run-'.$marketingLeadGenerationRun->id,
+                ])
+                ->withErrors(['lead_index' => 'The selected lead could not be found.']);
+        }
+
+        unset($leads[$leadIndex]);
+        $updatedLeads = array_values($leads);
+
+        $marketingLeadGenerationRun->forceFill([
+            'leads' => $updatedLeads,
+            'discovered_count' => count($updatedLeads),
+        ])->save();
+
+        return redirect()
+            ->route('marketing.index', [
+                'tab' => 'lead-generation',
+                '_dialog' => 'lead-run-'.$marketingLeadGenerationRun->id,
+            ])
+            ->with('success', 'Lead removed from this run.');
+    }
+
+    public function destroyLeadGenerationLeads(Request $request, MarketingLeadGenerationRun $marketingLeadGenerationRun): RedirectResponse
+    {
+        $this->abortUnlessClientAllowed($marketingLeadGenerationRun->client_id);
+
+        $validated = $request->validate([
+            'lead_indices' => ['required', 'array', 'min:1'],
+            'lead_indices.*' => ['integer', 'min:0'],
+        ]);
+
+        $leadIndices = collect($validated['lead_indices'] ?? [])
+            ->map(fn ($value) => (int) $value)
+            ->filter(fn (int $value) => $value >= 0)
+            ->unique()
+            ->values();
+
+        if ($leadIndices->isEmpty()) {
+            return redirect()
+                ->route('marketing.index', [
+                    'tab' => 'lead-generation',
+                    '_dialog' => 'lead-run-'.$marketingLeadGenerationRun->id,
+                ])
+                ->withErrors(['lead_indices' => 'Select at least one lead to delete.']);
+        }
+
+        $leads = is_array($marketingLeadGenerationRun->leads) ? $marketingLeadGenerationRun->leads : [];
+        $remainingLeads = [];
+
+        foreach ($leads as $index => $lead) {
+            if ($leadIndices->contains($index)) {
+                continue;
+            }
+
+            $remainingLeads[] = $lead;
+        }
+
+        $marketingLeadGenerationRun->forceFill([
+            'leads' => $remainingLeads,
+            'discovered_count' => count($remainingLeads),
+        ])->save();
+
+        return redirect()
+            ->route('marketing.index', [
+                'tab' => 'lead-generation',
+                '_dialog' => 'lead-run-'.$marketingLeadGenerationRun->id,
+            ])
+            ->with('success', $leadIndices->count() === 1 ? 'Lead removed from this run.' : $leadIndices->count().' leads removed from this run.');
+    }
+
+    public function destroyLeadGenerationRun(MarketingLeadGenerationRun $marketingLeadGenerationRun): RedirectResponse
+    {
+        $this->abortUnlessClientAllowed($marketingLeadGenerationRun->client_id);
+
+        $marketingLeadGenerationRun->delete();
+
+        return redirect()
+            ->route('marketing.index', ['tab' => 'lead-generation'])
+            ->with('success', 'Lead generation run deleted.');
+    }
+
     public function subscribeContact(MarketingContact $marketingContact): RedirectResponse
     {
         $this->abortUnlessClientAllowed($marketingContact->client_id);
@@ -210,7 +511,7 @@ class MarketingController extends Controller
             'email_template_id' => ['nullable', 'exists:email_templates,id'],
             'subject' => ['nullable', 'string', 'max:255'],
             'message_body' => ['nullable', 'string', 'max:20000'],
-        ]);
+        ] + $this->attachmentValidationRules());
 
         $account = $this->scopeEmailAccounts(EmailAccount::query())
             ->where('client_id', $marketingContact->client_id)
@@ -258,6 +559,8 @@ class MarketingController extends Controller
             $data['message'] = $messageBody;
         }
 
+        $attachments = $this->uploadedAttachmentsFromRequest($request);
+
         try {
             $log = $template
                 ? $sender->sendForClient($marketingContact->client_id, [
@@ -267,6 +570,7 @@ class MarketingController extends Controller
                     'template_key' => $template->key,
                     'marketing_contact_id' => $marketingContact->id,
                     'data' => $data,
+                    'attachments' => $attachments,
                 ])
                 : $sender->sendPlainForClient($marketingContact->client_id, [
                     'from_email' => $account->email,
@@ -274,6 +578,7 @@ class MarketingController extends Controller
                     'subject' => $renderer->render((string) $validated['subject'], $data),
                     'message' => $renderer->render($messageBody, $data),
                     'marketing_contact_id' => $marketingContact->id,
+                    'attachments' => $attachments,
                 ]);
         } catch (EmailSendException $exception) {
             $deliveryError = $exception->emailLog?->error_message ?: $exception->getPrevious()?->getMessage();
@@ -309,7 +614,7 @@ class MarketingController extends Controller
             'recipient_tag' => ['nullable', 'string', 'max:255'],
             'template_data_json' => ['nullable', 'string'],
             'send_now' => ['nullable', 'boolean'],
-        ]);
+        ] + $this->attachmentValidationRules());
 
         $clientId = $this->resolveClientId((int) ($validated['client_id'] ?? 0));
         $account = $this->scopeEmailAccounts(EmailAccount::query())
@@ -344,6 +649,8 @@ class MarketingController extends Controller
             ]);
         }
 
+        $attachments = $this->storeAttachmentsFromRequest($request, 'marketing-campaign-attachments/'.$clientId);
+
         $campaign = MarketingCampaign::create([
             'client_id' => $clientId,
             'email_account_id' => $account->id,
@@ -352,6 +659,7 @@ class MarketingController extends Controller
             'subject' => $validated['subject'],
             'body' => $validated['body'] ?? null,
             'template_data' => $this->decodeTemplateData((string) ($validated['template_data_json'] ?? '')),
+            'attachments' => $attachments,
             'recipient_tag' => filled($validated['recipient_tag'] ?? null) ? trim((string) $validated['recipient_tag']) : null,
             'status' => MarketingCampaign::STATUS_DRAFT,
             'total_recipients' => $recipientCount,
@@ -468,6 +776,34 @@ class MarketingController extends Controller
             ->all();
     }
 
+    /**
+     * @return array<int, string>
+     */
+    private function leadIndustryOptions(): array
+    {
+        return collect(config('lead_generation.industries', []))
+            ->map(fn ($industry): string => trim((string) $industry))
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function leadCountryOptions(): array
+    {
+        return collect(config('lead_generation.countries', []))
+            ->map(fn ($country): string => trim((string) $country))
+            ->filter()
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+    }
+
     private function etaLabel(?int $seconds): string
     {
         if ($seconds === null) {
@@ -492,6 +828,20 @@ class MarketingController extends Controller
             ->map(fn ($tag): string => trim($tag))
             ->filter()
             ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function keywordsFromText(?string $value): array
+    {
+        return collect(preg_split('/[,;\n]+/', (string) $value) ?: [])
+            ->map(fn ($keyword): string => trim($keyword))
+            ->filter()
+            ->unique()
+            ->take(25)
             ->values()
             ->all();
     }

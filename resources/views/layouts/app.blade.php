@@ -9,11 +9,10 @@
         @php
             $activeSidebarSection = match (true) {
                 request()->routeIs('dashboard') => 'overview',
-                request()->routeIs('clients.*', 'users.*') => 'companies',
+                request()->routeIs('clients.*', 'users.*', 'domains.*', 'email-accounts.*', 'email-templates.*') => 'companies',
                 request()->routeIs('send-email.*', 'inbox.*', 'email-logs.*') => 'mail',
                 request()->routeIs('marketing.*') => 'marketing',
                 request()->routeIs('api-keys.*') => 'developer',
-                request()->routeIs('domains.*', 'email-accounts.*', 'email-templates.*') => 'settings',
                 default => null,
             };
         @endphp
@@ -21,8 +20,9 @@
             (() => {
                 const root = document.documentElement;
                 const activeSection = @json($activeSidebarSection);
-                const defaultCollapsedSections = new Set(['overview', 'companies', 'mail']);
-                const allSections = ['overview', 'companies', 'mail', 'marketing', 'developer', 'settings'];
+                const sectionsStorageKey = 'powermail.sidebar.sections.v2';
+                const defaultCollapsedSections = new Set(['overview', 'mail']);
+                const allSections = ['overview', 'companies', 'mail', 'marketing', 'developer'];
 
                 if (localStorage.getItem('powermail.sidebar.collapsed') === 'true') {
                     root.classList.add('sidebar-collapsed');
@@ -31,7 +31,7 @@
                 let sectionState = {};
 
                 try {
-                    sectionState = JSON.parse(localStorage.getItem('powermail.sidebar.sections') || '{}') || {};
+                    sectionState = JSON.parse(localStorage.getItem(sectionsStorageKey) || '{}') || {};
                 } catch (error) {
                     sectionState = {};
                 }
@@ -190,10 +190,6 @@
             gap: 6px;
         }
 
-        .settings-nav-section {
-            margin-top: auto;
-        }
-
         .nav-section-title {
             align-items: center;
             background: transparent;
@@ -249,8 +245,7 @@
         html.nav-section-collapsed-companies [data-nav-section="companies"] .nav-section-chevron,
         html.nav-section-collapsed-mail [data-nav-section="mail"] .nav-section-chevron,
         html.nav-section-collapsed-marketing [data-nav-section="marketing"] .nav-section-chevron,
-        html.nav-section-collapsed-developer [data-nav-section="developer"] .nav-section-chevron,
-        html.nav-section-collapsed-settings [data-nav-section="settings"] .nav-section-chevron {
+        html.nav-section-collapsed-developer [data-nav-section="developer"] .nav-section-chevron {
             transform: rotate(-90deg);
         }
 
@@ -258,8 +253,7 @@
         html.nav-section-collapsed-companies [data-nav-section="companies"] .nav-section-items,
         html.nav-section-collapsed-mail [data-nav-section="mail"] .nav-section-items,
         html.nav-section-collapsed-marketing [data-nav-section="marketing"] .nav-section-items,
-        html.nav-section-collapsed-developer [data-nav-section="developer"] .nav-section-items,
-        html.nav-section-collapsed-settings [data-nav-section="settings"] .nav-section-items {
+        html.nav-section-collapsed-developer [data-nav-section="developer"] .nav-section-items {
             max-height: 0;
             opacity: 0;
         }
@@ -701,6 +695,15 @@
             margin-bottom: 20px;
         }
 
+        .panel-header-actions {
+            align-items: end;
+            display: flex;
+            flex: 0 0 auto;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
         .panel-header p {
             color: var(--text-secondary);
             margin: 6px 0 0;
@@ -771,6 +774,42 @@
             min-height: 40px;
             padding: 8px 14px;
             white-space: nowrap;
+        }
+
+        .panel-header-actions .table-filter-bar {
+            align-items: end;
+            border-top: 0;
+            display: flex;
+            gap: 8px;
+            grid-template-columns: none;
+            margin: 0;
+            padding-top: 0;
+        }
+
+        .panel-header-actions .table-filter-bar .field {
+            min-width: 190px;
+        }
+
+        .panel-header-actions .table-filter-bar label {
+            font-size: 11px;
+        }
+
+        .panel-header-actions .table-filter-bar select,
+        .panel-header-actions .table-filter-actions,
+        .panel-header-actions .table-filter-actions button,
+        .panel-header-actions .table-filter-actions .button,
+        .panel-header-actions > button {
+            min-height: 38px;
+        }
+
+        .panel-header-actions .table-filter-bar select {
+            padding-bottom: 8px;
+            padding-top: 8px;
+        }
+
+        .panel-header-actions .table-filter-actions button,
+        .panel-header-actions .table-filter-actions .button {
+            padding: 7px 12px;
         }
 
         .metric {
@@ -1314,6 +1353,61 @@
             padding: 5px 10px;
         }
 
+        .inbox-loading-row td {
+            border-bottom: 0;
+            padding: 2.5rem 1rem;
+        }
+
+        .inbox-loading-indicator {
+            align-items: center;
+            color: var(--text-secondary);
+            display: flex;
+            font-size: 0.85rem;
+            gap: 0.6rem;
+            justify-content: center;
+        }
+
+        .inbox-spinner {
+            animation: inbox-spin 0.75s linear infinite;
+            border: 2px solid var(--border);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            display: inline-block;
+            flex-shrink: 0;
+            height: 18px;
+            width: 18px;
+        }
+
+        @keyframes inbox-spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .inbox-check-col {
+            padding-left: 1rem;
+            width: 36px;
+        }
+
+        .inbox-check-col input[type="checkbox"] {
+            cursor: pointer;
+            margin: 0;
+        }
+
+        .inbox-bulk-bar {
+            align-items: center;
+            background: var(--bg-secondary, #f8f9fa);
+            border: 1px solid var(--border);
+            border-bottom: 0;
+            border-radius: 6px 6px 0 0;
+            display: flex;
+            font-size: 0.875rem;
+            gap: 0.75rem;
+            padding: 0.5rem 1rem;
+        }
+
+        .inbox-bulk-bar[hidden] {
+            display: none;
+        }
+
         .compose-mail-card {
             border-radius: 18px;
             margin: 0 auto;
@@ -1750,7 +1844,12 @@
             display: flex;
             flex-wrap: nowrap;
             gap: 8px;
+            justify-content: flex-start;
             white-space: nowrap;
+        }
+
+        .inline-actions > * {
+            flex: 0 0 auto;
         }
 
         .inline-actions form {
@@ -2645,8 +2744,393 @@
             padding: 0;
         }
 
+        .lead-generation-stack {
+            background: #fff;
+            border-bottom: 1px solid var(--border);
+            padding: 18px;
+        }
+
+        .lead-generation-card {
+            background: #F8FAFC;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 18px;
+        }
+
+        .lead-generation-card .marketing-table-head {
+            margin-bottom: 14px;
+        }
+
+        .lead-generation-form {
+            background: transparent;
+            border-bottom: 0;
+            padding: 0;
+        }
+
+        .lead-generation-form-grid {
+            gap: 12px;
+        }
+
+        .lead-generation-form-field {
+            margin-top: 14px;
+        }
+
+        .lead-generation-form textarea {
+            min-height: 86px;
+        }
+
+        .lead-generation-parse-preview {
+            background: #F8FAFC;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            margin-top: 12px;
+            padding: 12px;
+        }
+
+        .lead-generation-parse-preview-head {
+            display: grid;
+            gap: 4px;
+        }
+
+        .lead-generation-parse-preview-head strong {
+            color: var(--text);
+            font-size: 13px;
+            font-weight: 850;
+        }
+
+        .lead-generation-parse-preview-list {
+            border-top: 1px solid var(--border);
+            display: grid;
+            gap: 6px;
+            margin-top: 10px;
+            max-height: 200px;
+            overflow: auto;
+            padding-top: 10px;
+        }
+
+        .lead-generation-parse-row {
+            align-items: center;
+            display: grid;
+            gap: 8px;
+            grid-template-columns: 1fr auto;
+        }
+
+        .lead-generation-parse-row span {
+            color: var(--text);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .lead-generation-parse-row small {
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .lead-generation-form .lead-research-submit.is-loading::after {
+            animation-duration: 520ms;
+            border-color: rgba(17, 24, 39, 0.18);
+            border-top-color: #111827;
+        }
+
+        .lead-generation-progress {
+            background: #F8FAFC;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            margin-top: 14px;
+            padding: 14px;
+        }
+
+        .lead-generation-progress[hidden] {
+            display: none;
+        }
+
+        .lead-generation-progress-head {
+            align-items: center;
+            display: flex;
+            gap: 12px;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .lead-generation-progress-head span {
+            color: var(--text);
+            font-size: 13px;
+            font-weight: 850;
+        }
+
+        .lead-generation-progress-head strong {
+            color: var(--primary);
+            font-size: 13px;
+            font-weight: 900;
+        }
+
+        .lead-generation-progress-track {
+            background: #E5E7EB;
+            border-radius: 999px;
+            height: 8px;
+            overflow: hidden;
+        }
+
+        .lead-generation-progress-bar {
+            background: linear-gradient(90deg, var(--primary), var(--success));
+            border-radius: inherit;
+            display: block;
+            height: 100%;
+            transition: width 420ms ease;
+            width: 0%;
+        }
+
+        .lead-generation-progress-feed {
+            display: grid;
+            gap: 7px;
+            list-style: none;
+            margin: 12px 0 0;
+            padding: 0;
+        }
+
+        .lead-generation-progress-feed li {
+            align-items: center;
+            color: var(--text-secondary);
+            display: flex;
+            font-size: 12px;
+            font-weight: 750;
+            gap: 8px;
+        }
+
+        .lead-generation-progress-feed li::before {
+            background: #CBD5E1;
+            border-radius: 999px;
+            content: "";
+            flex: 0 0 7px;
+            height: 7px;
+            width: 7px;
+        }
+
+        .lead-generation-progress-feed li.active {
+            color: var(--text);
+        }
+
+        .lead-generation-progress-feed li.active::before {
+            animation: button-spin 620ms linear infinite;
+            background: transparent;
+            border: 2px solid rgba(79, 107, 255, 0.22);
+            border-top-color: var(--primary);
+            height: 10px;
+            width: 10px;
+        }
+
+        .lead-generation-progress-feed li.complete {
+            color: var(--success);
+        }
+
+        .lead-generation-progress-feed li.complete::before {
+            background: var(--success);
+        }
+
+        .lead-generation-progress-head {
+            align-items: center;
+            display: flex;
+            gap: 10px;
+        }
+
+        .lead-generation-progress-spinner {
+            animation: button-spin 700ms linear infinite;
+            border: 2.5px solid rgba(79, 107, 255, 0.18);
+            border-radius: 50%;
+            border-top-color: var(--primary);
+            display: none;
+            flex: 0 0 18px;
+            height: 18px;
+            width: 18px;
+        }
+
+        .lead-generation-progress:not([hidden]) .lead-generation-progress-spinner {
+            display: block;
+        }
+
+        .lead-generation-progress-head span[data-lead-progress-title] {
+            flex: 1;
+        }
+
+        .field-hint {
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        /* Keyword tag input */
+        .keyword-tag-input {
+            align-items: flex-start;
+            background: var(--input-bg, #fff);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            cursor: text;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            min-height: 44px;
+            padding: 8px 10px;
+            transition: border-color 160ms ease, box-shadow 160ms ease;
+        }
+
+        .keyword-tag-input:focus-within {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 107, 255, 0.12);
+        }
+
+        .keyword-tags {
+            align-items: center;
+            display: contents;
+        }
+
+        .keyword-tag {
+            align-items: center;
+            background: #EEF2FF;
+            border: 1px solid rgba(79, 107, 255, 0.24);
+            border-radius: 999px;
+            color: var(--primary);
+            display: inline-flex;
+            font-size: 12px;
+            font-weight: 850;
+            gap: 5px;
+            line-height: 1;
+            padding: 4px 8px 4px 10px;
+            white-space: nowrap;
+        }
+
+        .keyword-tag-remove {
+            align-items: center;
+            background: transparent;
+            border: 0;
+            border-radius: 50%;
+            box-shadow: none;
+            color: var(--primary);
+            cursor: pointer;
+            display: inline-flex;
+            height: 16px;
+            justify-content: center;
+            min-height: 0;
+            opacity: 0.6;
+            padding: 0;
+            transform: none;
+            width: 16px;
+        }
+
+        .keyword-tag-remove:hover {
+            background: rgba(79, 107, 255, 0.12);
+            opacity: 1;
+            transform: none;
+        }
+
+        .keyword-tag-remove svg {
+            height: 10px;
+            width: 10px;
+        }
+
+        .keyword-tag-text {
+            background: transparent;
+            border: 0 !important;
+            box-shadow: none !important;
+            flex: 1;
+            font-size: 13px;
+            min-height: 28px;
+            min-width: 120px;
+            padding: 0 !important;
+        }
+
+        .keyword-tag-text:focus {
+            box-shadow: none !important;
+        }
+
+        .lead-source-data-field {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .lead-source-data-field > summary {
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 700;
+            list-style: none;
+            padding: 10px 14px;
+            user-select: none;
+        }
+
+        .lead-source-data-field > summary::-webkit-details-marker { display: none; }
+
+        .lead-source-data-field > summary::before {
+            content: '▸ ';
+            font-size: 10px;
+            opacity: 0.5;
+        }
+
+        .lead-source-data-field[open] > summary::before {
+            content: '▾ ';
+        }
+
+        .lead-source-data-inner {
+            border-top: 1px solid var(--border);
+            padding: 12px 14px 14px;
+        }
+
+        .lead-source-data-inner textarea {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-top: 8px;
+            padding: 10px;
+        }
+
+        .lead-generation-form-actions {
+            display: flex;
+            justify-content: flex-start;
+            margin-top: 14px;
+        }
+
+        .marketing-lead-preview {
+            margin-top: 8px;
+        }
+
+        .marketing-lead-preview summary {
+            color: var(--primary);
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 850;
+        }
+
+        .marketing-lead-list {
+            display: grid;
+            gap: 6px;
+            margin-top: 8px;
+        }
+
+        .marketing-lead-list div {
+            background: #F8FAFC;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            display: grid;
+            gap: 2px;
+            padding: 8px;
+        }
+
+        .marketing-lead-list strong,
+        .marketing-lead-list span {
+            overflow-wrap: anywhere;
+        }
+
+        .marketing-lead-list span {
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
         .marketing-tab-body > .analytics-grid {
             padding: 18px;
+        }
+
+        .marketing-tab-body > .table-wrap {
+            border-top: 1px solid var(--border);
         }
 
         .marketing-table-head {
@@ -2887,6 +3371,93 @@
             width: min(860px, calc(100vw - 32px));
         }
 
+        .marketing-lead-dialog {
+            width: min(95vw, 1500px);
+            max-width: 95vw;
+            max-height: min(95vh, 1200px);
+        }
+
+        .marketing-lead-dialog .edit-dialog-body {
+            padding: 24px 24px 20px;
+        }
+
+        .marketing-lead-dialog .marketing-table-head {
+            margin-bottom: 16px;
+        }
+
+        .marketing-lead-dialog .marketing-contact-dialog-head {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+        }
+
+        .marketing-lead-dialog .marketing-contact-dialog-section {
+            margin-top: 20px;
+        }
+
+        .marketing-lead-dialog .marketing-table {
+            width: 100%;
+        }
+
+        .marketing-lead-dialog .marketing-table thead {
+            background: #F8FAFC;
+        }
+
+        .marketing-lead-dialog .marketing-table th {
+            color: var(--primary);
+            font-size: 11px;
+            font-weight: 900;
+            letter-spacing: 0;
+            text-transform: uppercase;
+        }
+
+        .marketing-lead-dialog .marketing-table th,
+        .marketing-lead-dialog .marketing-table td {
+            height: 50px;
+            max-height: 50px;
+            overflow: hidden;
+            padding-bottom: 8px;
+            padding-top: 8px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+
+        .marketing-lead-dialog .marketing-table td {
+            color: var(--text);
+            font-size: 13px;
+        }
+
+        .marketing-run-detail-link {
+            margin-top: 6px;
+        }
+
+        .marketing-run-detail-link .text-link {
+            background: none;
+            border: 0;
+            color: var(--primary);
+            font-size: 12px;
+            font-weight: 800;
+            padding: 0;
+        }
+
+        .marketing-run-message-dialog {
+            width: min(640px, calc(100vw - 32px));
+        }
+
+        .marketing-run-message-box {
+            background: #F8FAFC;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--text);
+            font-size: 13px;
+            font-weight: 700;
+            line-height: 1.6;
+            overflow-wrap: anywhere;
+            padding: 14px 16px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
         .marketing-contact-dialog-head {
             align-items: center;
             border-bottom: 1px solid var(--border);
@@ -2952,8 +3523,44 @@
             margin: 0;
         }
 
+        .marketing-modal-metrics {
+            gap: 10px;
+            margin: 0;
+        }
+
+        .marketing-modal-metrics .metric {
+            min-height: 122px;
+            padding: 14px 16px;
+        }
+
+        .marketing-modal-metrics .metric-value {
+            font-size: 13px;
+            line-height: 1.45;
+            overflow-wrap: anywhere;
+        }
+
         .marketing-detail-grid.compact {
             grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        @media (max-width: 820px) {
+            .marketing-detail-grid.compact {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .marketing-modal-metrics {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        @media (max-width: 560px) {
+            .marketing-detail-grid.compact {
+                grid-template-columns: 1fr;
+            }
+
+            .marketing-modal-metrics {
+                grid-template-columns: 1fr;
+            }
         }
 
         .marketing-detail-grid div {
@@ -3073,14 +3680,31 @@
         }
 
         .marketing-workspace .marketing-table .inline-actions {
-            gap: 4px;
+            align-items: center;
+            flex-wrap: nowrap;
+            gap: 6px;
             justify-content: flex-end;
             max-width: 100%;
-            overflow: hidden;
+            min-height: 34px;
+            overflow: visible;
+        }
+
+        .marketing-workspace .marketing-table .inline-actions > * {
+            flex: 0 0 auto;
         }
 
         .marketing-workspace .marketing-table .inline-actions form {
             flex: 0 0 auto;
+            margin: 0;
+        }
+
+        .marketing-workspace .marketing-table td:last-child {
+            height: auto;
+            max-height: none;
+            overflow: visible;
+            padding-bottom: 10px;
+            padding-top: 10px;
+            white-space: normal;
         }
 
         .marketing-workspace .button,
@@ -3174,6 +3798,52 @@
             min-height: 190px;
         }
 
+        .analytics-volume-chart {
+            background:
+                linear-gradient(180deg, rgba(79, 107, 255, 0.05), rgba(255, 255, 255, 0)),
+                #F8FAFC;
+            border: 1px solid rgba(229, 231, 235, 0.9);
+            border-radius: 10px;
+            height: 260px;
+            padding: 18px 18px 8px;
+        }
+
+        .analytics-chart-svg {
+            height: 100%;
+            min-height: 220px;
+        }
+
+        .analytics-volume-days {
+            display: grid;
+            gap: 10px;
+            grid-template-columns: repeat(7, minmax(0, 1fr));
+            margin-top: 12px;
+        }
+
+        .analytics-volume-days div {
+            background: #F8FAFC;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            display: grid;
+            gap: 2px;
+            min-height: 54px;
+            padding: 8px 6px;
+            place-items: center;
+            text-align: center;
+        }
+
+        .analytics-volume-days strong {
+            font-size: 17px;
+            line-height: 1;
+        }
+
+        .analytics-volume-days span {
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 850;
+            text-transform: uppercase;
+        }
+
         .analytics-day {
             align-items: center;
             display: grid;
@@ -3215,6 +3885,25 @@
             gap: 13px;
         }
 
+        .analytics-health-stack {
+            background: #F1F5F9;
+            border-radius: 999px;
+            display: flex;
+            height: 18px;
+            margin-bottom: 18px;
+            min-width: 0;
+            overflow: hidden;
+        }
+
+        .analytics-health-stack span {
+            display: block;
+            min-width: 0;
+        }
+
+        .analytics-health-stack span[data-tone="green"] { background: #16A34A; }
+        .analytics-health-stack span[data-tone="amber"] { background: #D97706; }
+        .analytics-health-stack span[data-tone="red"] { background: #DC2626; }
+
         .analytics-progress-row {
             display: grid;
             gap: 7px;
@@ -3250,6 +3939,48 @@
         .analytics-progress-row[data-tone="green"] .analytics-progress span { background: #16A34A; }
         .analytics-progress-row[data-tone="amber"] .analytics-progress span { background: #D97706; }
         .analytics-progress-row[data-tone="red"] .analytics-progress span { background: #DC2626; }
+
+        .analytics-tag-graph {
+            display: grid;
+            gap: 14px;
+        }
+
+        .analytics-tag-row {
+            display: grid;
+            gap: 8px;
+        }
+
+        .analytics-tag-row > div:first-child {
+            align-items: center;
+            display: flex;
+            gap: 12px;
+            justify-content: space-between;
+        }
+
+        .analytics-tag-row strong {
+            font-size: 13px;
+        }
+
+        .analytics-tag-row span {
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-weight: 850;
+        }
+
+        .analytics-tag-track {
+            background: #EEF2FF;
+            border-radius: 999px;
+            height: 14px;
+            overflow: hidden;
+        }
+
+        .analytics-tag-track span {
+            background: linear-gradient(90deg, #4F6BFF, #20C997);
+            border-radius: inherit;
+            display: block;
+            height: 100%;
+            min-width: 4px;
+        }
 
         .analytics-campaign-list {
             display: grid;
@@ -3373,6 +4104,44 @@
             padding: 0;
             transform: none;
             width: 28px;
+        }
+
+        .mail-action-button {
+            align-items: center;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            color: var(--text);
+            display: inline-flex;
+            gap: 4px;
+            justify-content: center;
+            min-height: 26px;
+            padding: 4px 8px;
+            text-decoration: none;
+            transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+        }
+
+        .mail-action-button svg {
+            fill: none;
+            flex: 0 0 12px;
+            height: 12px;
+            stroke: currentColor;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            stroke-width: 2;
+            width: 12px;
+        }
+
+        .mail-action-button span {
+            font-size: 11px;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .mail-action-button:hover {
+            background: #F8FAFC;
+            border-color: var(--primary);
+            color: var(--primary);
         }
 
         .mail-icon-action svg {
@@ -3816,6 +4585,21 @@
                 padding: 14px;
             }
 
+            .panel-header {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .panel-header-actions {
+                justify-content: flex-start;
+                width: 100%;
+            }
+
+            .panel-header-actions .table-filter-bar {
+                flex-wrap: wrap;
+                width: 100%;
+            }
+
             .mail-toolbar .inline-actions {
                 width: 100%;
             }
@@ -3886,6 +4670,24 @@
             .analytics-bars {
                 gap: 8px;
                 grid-template-columns: repeat(7, minmax(28px, 1fr));
+            }
+
+            .analytics-volume-chart {
+                height: 220px;
+                padding: 14px 12px 6px;
+            }
+
+            .analytics-volume-days {
+                gap: 6px;
+                grid-template-columns: repeat(7, minmax(34px, 1fr));
+                overflow-x: auto;
+                padding-bottom: 2px;
+            }
+
+            .analytics-volume-days div {
+                min-width: 34px;
+                padding-left: 4px;
+                padding-right: 4px;
             }
 
             .marketing-workspace-head,
@@ -4022,29 +4824,10 @@
                             </div>
                         </div>
 
-                        @if ($currentUser->isAdmin())
-                            <div class="nav-section" data-nav-section="companies">
-                                <button class="nav-section-title" type="button" data-nav-section-toggle aria-expanded="true" aria-controls="nav-section-companies">
-                                    <span>Companies</span>
-                                    <svg class="nav-section-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-                                </button>
-                                <div class="nav-section-items" id="nav-section-companies">
-                                    <a href="{{ route('clients.index') }}" title="Clients" aria-label="Clients" @class(['active' => request()->routeIs('clients.*')])>
-                                        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
-                                        <span>Clients</span>
-                                    </a>
-                                    <a href="{{ route('users.index') }}" title="Users" aria-label="Users" @class(['active' => request()->routeIs('users.*')])>
-                                        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M18 8h4"/><path d="M20 6v4"/></svg></span>
-                                        <span>Users</span>
-                                    </a>
-                                </div>
-                            </div>
-                        @endif
-
                         @if ($currentUser->canAccess(\App\Models\User::PERMISSION_SEND_EMAILS) || $currentUser->canAccess(\App\Models\User::PERMISSION_VIEW_INBOX) || $currentUser->canAccess(\App\Models\User::PERMISSION_VIEW_LOGS))
                             <div class="nav-section" data-nav-section="mail">
                                 <button class="nav-section-title" type="button" data-nav-section-toggle aria-expanded="true" aria-controls="nav-section-mail">
-                                    <span>Mail Operations</span>
+                                    <span>Mail</span>
                                     <svg class="nav-section-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
                                 </button>
                                 <div class="nav-section-items" id="nav-section-mail">
@@ -4085,29 +4868,22 @@
                             </div>
                         @endif
 
-                        @if ($currentUser->isAdmin())
-                            <div class="nav-section" data-nav-section="developer">
-                                <button class="nav-section-title" type="button" data-nav-section-toggle aria-expanded="true" aria-controls="nav-section-developer">
-                                    <span>Developer</span>
-                                    <svg class="nav-section-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-                                </button>
-                                <div class="nav-section-items" id="nav-section-developer">
-                                    <a href="{{ route('api-keys.index') }}" title="API Keys" aria-label="API Keys" @class(['active' => request()->routeIs('api-keys.*')])>
-                                        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15 2 6 6"/><path d="m18 5 3 3"/></svg></span>
-                                        <span>API Keys</span>
-                                    </a>
-                                </div>
-                            </div>
-                        @endif
-
                         @if ($currentUser->isAdmin() || $currentUser->canAccess(\App\Models\User::PERMISSION_MANAGE_ACCOUNTS) || $currentUser->canAccess(\App\Models\User::PERMISSION_MANAGE_TEMPLATES))
-                            <div class="nav-section settings-nav-section" data-nav-section="settings">
-                                <button class="nav-section-title" type="button" data-nav-section-toggle aria-expanded="true" aria-controls="nav-section-settings">
-                                    <span>Settings</span>
+                            <div class="nav-section" data-nav-section="companies">
+                                <button class="nav-section-title" type="button" data-nav-section-toggle aria-expanded="true" aria-controls="nav-section-companies">
+                                    <span>Company</span>
                                     <svg class="nav-section-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
                                 </button>
-                                <div class="nav-section-items" id="nav-section-settings">
+                                <div class="nav-section-items" id="nav-section-companies">
                                     @if ($currentUser->isAdmin())
+                                        <a href="{{ route('clients.index') }}" title="Clients" aria-label="Clients" @class(['active' => request()->routeIs('clients.*')])>
+                                            <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+                                            <span>Clients</span>
+                                        </a>
+                                        <a href="{{ route('users.index') }}" title="Users" aria-label="Users" @class(['active' => request()->routeIs('users.*')])>
+                                            <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M18 8h4"/><path d="M20 6v4"/></svg></span>
+                                            <span>Users</span>
+                                        </a>
                                         <a href="{{ route('domains.index') }}" title="Domains" aria-label="Domains" @class(['active' => request()->routeIs('domains.*')])>
                                             <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 0 20"/><path d="M12 2a15.3 15.3 0 0 0 0 20"/></svg></span>
                                             <span>Domains</span>
@@ -4128,6 +4904,22 @@
                                 </div>
                             </div>
                         @endif
+
+                        @if ($currentUser->isAdmin())
+                            <div class="nav-section" data-nav-section="developer">
+                                <button class="nav-section-title" type="button" data-nav-section-toggle aria-expanded="true" aria-controls="nav-section-developer">
+                                    <span>Developer</span>
+                                    <svg class="nav-section-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+                                </button>
+                                <div class="nav-section-items" id="nav-section-developer">
+                                    <a href="{{ route('api-keys.index') }}" title="API Keys" aria-label="API Keys" @class(['active' => request()->routeIs('api-keys.*')])>
+                                        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15 2 6 6"/><path d="m18 5 3 3"/></svg></span>
+                                        <span>API Keys</span>
+                                    </a>
+                                </div>
+                            </div>
+                        @endif
+
                     </nav>
 
                     <div class="sidebar-footer">
@@ -4204,8 +4996,8 @@
         <script>
             (() => {
                 const storageKey = 'powermail.sidebar.collapsed';
-                const sectionsStorageKey = 'powermail.sidebar.sections';
-                const defaultCollapsedSections = new Set(['overview', 'companies', 'mail']);
+                const sectionsStorageKey = 'powermail.sidebar.sections.v2';
+                const defaultCollapsedSections = new Set(['overview', 'mail']);
                 const toggle = document.querySelector('[data-sidebar-toggle]');
                 const sections = document.querySelectorAll('[data-nav-section]');
 
@@ -4501,6 +5293,22 @@
                     : pendingForm.requestSubmit();
             });
 
+            document.addEventListener('change', (event) => {
+                const field = event.target.closest('[data-auto-submit-filter] select');
+                const form = field?.closest('form');
+
+                if (!field || !form) {
+                    return;
+                }
+
+                if (field.value === '') {
+                    window.location.href = form.action;
+                    return;
+                }
+
+                form.requestSubmit();
+            });
+
             document.addEventListener('click', (event) => {
                 const opener = event.target.closest('[data-open-dialog]');
                 const closer = event.target.closest('[data-close-dialog]');
@@ -4567,6 +5375,349 @@
             if (autoOpenDialog?.showModal) {
                 autoOpenDialog.showModal();
             }
+
+            // ─── Lead Generation Form: Industry Keywords + Province + Spinner ─────
+            (() => {
+                // Industry → suggested keywords map
+                const INDUSTRY_KEYWORDS = {
+                    'Accounting': ['accounting firm', 'chartered accountant', 'bookkeeper', 'tax consultant', 'auditor'],
+                    'Advertising and Marketing': ['marketing agency', 'digital marketing', 'advertising', 'branding', 'SEO'],
+                    'Aerospace and Defense': ['aerospace', 'defense contractor', 'aviation', 'aircraft manufacturer'],
+                    'Agriculture': ['farm', 'agriculture', 'agribusiness', 'crop production', 'irrigation'],
+                    'Architecture and Planning': ['architect', 'architectural firm', 'urban planning', 'building design'],
+                    'Automotive': ['car dealership', 'auto repair', 'vehicle', 'automotive parts', 'mechanic'],
+                    'Banking': ['bank', 'financial institution', 'credit union', 'mortgage', 'lending'],
+                    'Beauty and Personal Care': ['salon', 'beauty', 'spa', 'cosmetics', 'skincare'],
+                    'Biotechnology': ['biotech', 'biotechnology', 'life sciences', 'genomics', 'pharmaceutical research'],
+                    'Business Consulting': ['consulting firm', 'management consulting', 'business advisory', 'strategy'],
+                    'Chemicals': ['chemical company', 'specialty chemicals', 'industrial chemicals', 'plastics'],
+                    'Civil Engineering': ['civil engineering', 'infrastructure', 'structural engineering', 'geotechnical'],
+                    'Construction': ['construction company', 'contractor', 'builder', 'renovation', 'property development'],
+                    'Consumer Goods': ['consumer goods', 'retail brand', 'FMCG', 'household products'],
+                    'Customer Support': ['call centre', 'customer service', 'BPO', 'help desk', 'support centre'],
+                    'Cybersecurity': ['cybersecurity', 'information security', 'penetration testing', 'data protection', 'SIEM'],
+                    'Design': ['graphic design', 'design studio', 'UX design', 'product design', 'creative agency'],
+                    'E-commerce': ['online store', 'e-commerce', 'marketplace', 'dropshipping', 'Shopify'],
+                    'Education': ['school', 'university', 'tutoring', 'training centre', 'e-learning'],
+                    'Electrical and Electronic Manufacturing': ['electronics manufacturer', 'electrical components', 'PCB', 'semiconductor'],
+                    'Energy and Utilities': ['energy company', 'utilities', 'power generation', 'electricity provider'],
+                    'Engineering': ['engineering firm', 'mechanical engineering', 'project engineering', 'technical services'],
+                    'Entertainment': ['entertainment company', 'events', 'media production', 'film studio', 'talent agency'],
+                    'Environmental Services': ['environmental consulting', 'waste management', 'recycling', 'environmental compliance'],
+                    'Events Services': ['event management', 'event planner', 'conference organizer', 'catering'],
+                    'Facilities Services': ['facilities management', 'building maintenance', 'cleaning services', 'security services'],
+                    'Financial Services': ['financial services', 'investment', 'wealth management', 'financial planning', 'fintech'],
+                    'Food and Beverage': ['food supplier', 'beverage company', 'restaurant supplier', 'food manufacturer'],
+                    'Government': ['government agency', 'municipality', 'public sector', 'local government'],
+                    'Healthcare': ['hospital', 'clinic', 'healthcare provider', 'medical practice', 'doctor'],
+                    'Hospitality': ['hotel', 'guest house', 'lodge', 'hospitality management', 'resort'],
+                    'Human Resources': ['HR consulting', 'human resources', 'payroll services', 'talent management'],
+                    'Import and Export': ['import export', 'freight forwarder', 'customs broker', 'trading company'],
+                    'Industrial Automation': ['automation', 'robotics', 'PLC', 'industrial control', 'SCADA'],
+                    'Information Technology': ['IT company', 'software', 'technology solutions', 'IT services', 'cloud'],
+                    'Insurance': ['insurance broker', 'insurance company', 'underwriter', 'life insurance', 'short-term insurance'],
+                    'Interior Design': ['interior designer', 'interior decorating', 'space planning', 'furniture design'],
+                    'Investment Management': ['investment manager', 'asset management', 'hedge fund', 'portfolio management'],
+                    'Law Firms': ['law firm', 'attorneys', 'lawyers', 'legal practice', 'advocate'],
+                    'Legal Services': ['legal services', 'solicitor', 'notary', 'paralegal', 'legal advisor'],
+                    'Logistics and Supply Chain': ['logistics', 'supply chain', 'warehousing', 'courier', 'freight'],
+                    'Manufacturing': ['manufacturer', 'factory', 'production', 'OEM', 'fabrication'],
+                    'Market Research': ['market research', 'data analytics', 'survey', 'consumer insights', 'research firm'],
+                    'Media and Publishing': ['media company', 'publisher', 'newspaper', 'magazine', 'broadcast'],
+                    'Medical Devices': ['medical devices', 'medical equipment', 'diagnostics', 'surgical instruments'],
+                    'Mining and Metals': ['mining company', 'metal supplier', 'extraction', 'mineral processing'],
+                    'Nonprofit': ['nonprofit', 'NGO', 'charity', 'foundation', 'social enterprise'],
+                    'Oil and Gas': ['oil company', 'gas company', 'petroleum', 'upstream', 'downstream'],
+                    'Pharmaceuticals': ['pharmaceutical company', 'pharma', 'drug manufacturer', 'generic medicine'],
+                    'Professional Services': ['professional services', 'advisory', 'specialist firm', 'consultant'],
+                    'Property Management': ['property management', 'estate agent', 'real estate agency', 'letting agent'],
+                    'Public Relations': ['PR agency', 'public relations', 'communications', 'media relations'],
+                    'Real Estate': ['real estate', 'property', 'developer', 'estate agency', 'commercial property'],
+                    'Recruitment and Staffing': ['recruitment agency', 'staffing', 'headhunter', 'talent acquisition'],
+                    'Renewable Energy': ['solar energy', 'wind energy', 'renewable', 'clean energy', 'photovoltaic'],
+                    'Restaurants': ['restaurant', 'cafe', 'eatery', 'fast food', 'catering'],
+                    'Retail': ['retail store', 'shop', 'retailer', 'merchandise', 'chain store'],
+                    'SaaS': ['SaaS', 'software as a service', 'cloud software', 'subscription software', 'platform'],
+                    'Security Services': ['security company', 'armed response', 'CCTV', 'access control', 'guarding'],
+                    'Software Development': ['software development', 'app development', 'web development', 'custom software', 'developer'],
+                    'Sports and Fitness': ['gym', 'fitness centre', 'sports club', 'personal trainer', 'wellness'],
+                    'Telecommunications': ['telecom', 'telecommunications', 'ISP', 'internet provider', 'mobile network'],
+                    'Tourism and Travel': ['travel agency', 'tour operator', 'tourism', 'safari', 'accommodation'],
+                    'Training and Coaching': ['training provider', 'coaching', 'skills development', 'workshop', 'eLearning'],
+                    'Transportation': ['transport company', 'trucking', 'taxi', 'bus company', 'courier'],
+                    'Veterinary Services': ['veterinarian', 'vet clinic', 'animal hospital', 'pet care'],
+                    'Warehousing': ['warehouse', 'storage facility', 'distribution centre', 'fulfilment'],
+                    'Wholesale': ['wholesaler', 'distributor', 'bulk supplier', 'trade supplier'],
+                };
+
+                // ─ Keyword tag input ─────────────────────────────────────────────
+                const initKeywordTagInput = (form) => {
+                    const wrapper = form.querySelector('[data-keyword-tag-input]');
+                    const tagsContainer = form.querySelector('[data-keyword-tags]');
+                    const textInput = form.querySelector('[data-keyword-tag-text]');
+                    const hiddenInput = form.querySelector('[data-keyword-hidden]');
+
+                    // Return no-op API if elements not found — prevents undefined errors
+                    const noopApi = { setTags: () => {}, addTag: () => {} };
+                    if (!wrapper || !tagsContainer || !textInput || !hiddenInput) return noopApi;
+
+                    let tags = [];
+
+                    const syncHidden = () => {
+                        hiddenInput.value = tags.join(', ');
+                    };
+
+                    const renderTag = (tag) => {
+                        const el = document.createElement('span');
+                        el.className = 'keyword-tag';
+                        el.dataset.tag = tag;
+                        el.innerHTML = `${escapeHtml(tag)}<button type="button" class="keyword-tag-remove" aria-label="Remove ${escapeHtml(tag)}"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1l10 10M11 1L1 11"/></svg></button>`;
+                        el.querySelector('.keyword-tag-remove').addEventListener('click', () => {
+                            tags = tags.filter(t => t !== tag);
+                            el.remove();
+                            syncHidden();
+                        });
+                        tagsContainer.appendChild(el);
+                    };
+
+                    const addTag = (raw) => {
+                        const tag = raw.trim().replace(/,+$/, '').trim();
+                        if (tag === '' || tags.includes(tag)) return;
+                        tags.push(tag);
+                        renderTag(tag);
+                        syncHidden();
+                    };
+
+                    const setTags = (newTags) => {
+                        tags = [];
+                        tagsContainer.innerHTML = '';
+                        newTags.forEach(t => addTag(t));
+                    };
+
+                    // Seed from existing hidden value (old() on repopulate)
+                    if (hiddenInput.value.trim()) {
+                        hiddenInput.value.split(',').forEach(t => addTag(t));
+                    }
+
+                    textInput.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter' || e.key === ',') {
+                            e.preventDefault();
+                            const value = textInput.value.trim();
+                            if (value) {
+                                addTag(value);
+                                textInput.value = '';
+                            }
+                        } else if (e.key === 'Backspace' && textInput.value === '' && tags.length > 0) {
+                            const last = tags[tags.length - 1];
+                            tags.pop();
+                            tagsContainer.querySelector(`[data-tag="${CSS.escape(last)}"]`)?.remove();
+                            syncHidden();
+                        }
+                    });
+
+                    textInput.addEventListener('blur', () => {
+                        const value = textInput.value.trim();
+                        if (value) {
+                            addTag(value);
+                            textInput.value = '';
+                        }
+                    });
+
+                    wrapper.addEventListener('click', (e) => {
+                        if (!e.target.closest('.keyword-tag')) {
+                            textInput.focus();
+                        }
+                    });
+
+                    return { setTags, addTag };
+                };
+
+                // ─ Industry keyword auto-fill ─────────────────────────────────────
+                const form = document.querySelector('.lead-generation-form');
+                if (!form) return;
+
+                const sourceDataInput = form.querySelector('#lead_source_data');
+                const parseButton = form.querySelector('[data-parse-leads]');
+                const submitBtn = form.querySelector('[data-find-leads]');
+                const parseSummary = form.querySelector('[data-parse-summary]');
+                const parseHint = form.querySelector('[data-parse-hint]');
+                const parseList = form.querySelector('[data-parse-list]');
+
+                let hasParsedCompanies = false;
+
+                const setSubmitEnabled = (enabled) => {
+                    if (!submitBtn) return;
+                    submitBtn.disabled = !enabled;
+                };
+
+                const renderPreview = (companies) => {
+                    if (!parseList) return;
+
+                    if (!Array.isArray(companies) || companies.length === 0) {
+                        parseList.hidden = true;
+                        parseList.innerHTML = '';
+                        return;
+                    }
+
+                    const previewRows = companies.slice(0, 50).map((company, index) => {
+                        const name = (company.company_name || '').trim() || 'Unnamed company';
+                        const phone = (company.phone || '').trim();
+                        const location = (company.address_or_location || '').trim();
+                        const details = [location, phone].filter(Boolean).join(' | ') || 'No location or phone yet';
+
+                        return `<div class="lead-generation-parse-row"><span>${index + 1}. ${name}</span><small>${details}</small></div>`;
+                    }).join('');
+
+                    parseList.innerHTML = previewRows;
+                    parseList.hidden = false;
+                };
+
+                const setParseState = (ok, summary, hint) => {
+                    hasParsedCompanies = ok;
+                    if (parseSummary) parseSummary.textContent = summary;
+                    if (parseHint) parseHint.textContent = hint;
+                    setSubmitEnabled(ok);
+                };
+
+                setSubmitEnabled(false);
+
+                if (sourceDataInput) {
+                    sourceDataInput.addEventListener('input', () => {
+                        setParseState(false, 'Preview not generated yet.', 'Update detected. Click Parse Pasted Data again before continuing.');
+                        renderPreview([]);
+                    });
+                }
+
+                if (parseButton && sourceDataInput) {
+                    parseButton.addEventListener('click', async () => {
+                        const sourceText = sourceDataInput.value.trim();
+                        if (!sourceText) {
+                            setParseState(false, 'No text to parse.', 'Paste business listing text first.');
+                            return;
+                        }
+
+                        const previewUrl = parseButton.dataset.previewUrl;
+                        if (!previewUrl) {
+                            setParseState(false, 'Preview unavailable.', 'Preview endpoint is not configured.');
+                            return;
+                        }
+
+                        parseButton.disabled = true;
+                        parseButton.classList.add('is-loading');
+                        setParseState(false, 'Parsing pasted businesses...', 'Please wait while records are extracted.');
+
+                        try {
+                            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+                            const formData = new FormData(form);
+                            const response = await fetch(previewUrl, {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                headers: {
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': csrfToken,
+                                },
+                                body: formData,
+                            });
+
+                            // Detect session-expired HTML response before trying to parse JSON
+                            if (response.status === 419) {
+                                throw new Error('Session expired — please refresh the page and try again.');
+                            }
+
+                            const payload = await response.json();
+
+                            if (!response.ok) {
+                                const errorMessage = payload?.message
+                                    || payload?.errors?.source_data?.[0]
+                                    || payload?.errors?.client_id?.[0]
+                                    || 'Failed to parse pasted text.';
+                                throw new Error(errorMessage);
+                            }
+
+                            const companies = Array.isArray(payload.companies) ? payload.companies : [];
+                            renderPreview(companies);
+
+                            if (companies.length === 0) {
+                                setParseState(false, 'No business records found.', 'Adjust the pasted text and parse again.');
+                                return;
+                            }
+
+                            setParseState(true, `Parsed ${companies.length} business record${companies.length === 1 ? '' : 's'}.`, 'Preview looks good. Click Find Websites & Emails to continue.');
+                        } catch (error) {
+                            const message = error instanceof Error ? error.message : 'Failed to parse pasted text.';
+                            setParseState(false, 'Parse failed.', message);
+                        } finally {
+                            parseButton.disabled = false;
+                            parseButton.classList.remove('is-loading');
+                        }
+                    });
+                }
+
+                // ─ Lead research progress spinner ────────────────────────────────
+                const progressPanel = form.querySelector('[data-lead-progress]');
+                const progressTitle = form.querySelector('[data-lead-progress-title]');
+                const progressPercent = form.querySelector('[data-lead-progress-percent]');
+                const progressBar = form.querySelector('[data-lead-progress-bar]');
+                const progressFeed = form.querySelector('[data-lead-progress-feed]');
+
+                if (!progressPanel || !submitBtn) return;
+
+                const steps = progressFeed
+                    ? Array.from(progressFeed.querySelectorAll('li[data-progress-at]'))
+                        .map(li => ({ el: li, at: parseInt(li.dataset.progressAt, 10) || 0, text: li.textContent.trim() }))
+                        .sort((a, b) => a.at - b.at)
+                    : [];
+
+                const setProgress = (pct) => {
+                    if (progressBar) progressBar.style.width = `${pct}%`;
+                    if (progressPercent) progressPercent.textContent = `${pct}%`;
+
+                    steps.forEach(step => {
+                        if (pct >= step.at + 8) {
+                            step.el.classList.remove('active');
+                            step.el.classList.add('complete');
+                        } else if (pct >= step.at) {
+                            step.el.classList.add('active');
+                            step.el.classList.remove('complete');
+                            if (progressTitle) progressTitle.textContent = step.text;
+                        }
+                    });
+                };
+
+                form.addEventListener('submit', (event) => {
+                    if (!hasParsedCompanies) {
+                        event.preventDefault();
+                        setParseState(false, 'Parse required before enrichment.', 'Click Parse Pasted Data first, then submit.');
+                        return;
+                    }
+
+                    progressPanel.removeAttribute('hidden');
+                    progressPanel.setAttribute('aria-busy', 'true');
+                    submitBtn.disabled = true;
+
+                    // Animate progress over estimated time
+                    // The server can take a long time; we animate to ~92% then hold
+                    const totalEstimatedMs = 600000; // 10 min estimate (sequential web search + crawl per company)
+                    const tickMs = 800;
+                    let elapsed = 0;
+
+                    const interval = setInterval(() => {
+                        elapsed += tickMs;
+                        // Logarithmic curve: fast at first, slows toward 92%
+                        const rawPct = (elapsed / totalEstimatedMs) * 100;
+                        const pct = Math.min(92, Math.round(80 * Math.log(1 + rawPct / 12)));
+                        setProgress(pct);
+
+                        if (pct >= 92) {
+                            clearInterval(interval);
+                            // Show "finishing up" message
+                            if (progressTitle) progressTitle.textContent = 'Finishing up — almost there…';
+                        }
+                    }, tickMs);
+                });
+            })();
+            // ─── End Lead Generation ──────────────────────────────────────────────
         })();
     </script>
 </body>

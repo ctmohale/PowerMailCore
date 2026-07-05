@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Exceptions\EmailSendException;
+use App\Http\Controllers\Concerns\HandlesEmailAttachments;
 use App\Http\Controllers\Concerns\ScopesTenantData;
 use App\Http\Controllers\Controller;
 use App\Models\EmailAccount;
@@ -15,6 +16,7 @@ use Illuminate\View\View;
 
 class SendEmailController extends Controller
 {
+    use HandlesEmailAttachments;
     use ScopesTenantData;
 
     public function index(Request $request): View
@@ -48,7 +50,7 @@ class SendEmailController extends Controller
             'template_data' => ['nullable', 'array'],
             'data_json' => ['nullable', 'string'],
             'save_template_default' => ['nullable', 'boolean'],
-        ]);
+        ] + $this->attachmentValidationRules());
 
         $account = $this->scopeEmailAccounts(EmailAccount::query())
             ->where('is_active', true)
@@ -94,6 +96,8 @@ class SendEmailController extends Controller
             ])->save();
         }
 
+        $attachments = $this->uploadedAttachmentsFromRequest($request);
+
         try {
             $log = $template
                 ? $sender->sendForClient($account->client_id, [
@@ -102,12 +106,14 @@ class SendEmailController extends Controller
                     'subject' => $validated['subject'] ?? null,
                     'template_key' => $template->key,
                     'data' => $data,
+                    'attachments' => $attachments,
                 ])
                 : $sender->sendPlainForClient($account->client_id, [
                     'from_email' => $account->email,
                     'to' => $validated['to'],
                     'subject' => (string) $validated['subject'],
                     'message' => $messageBody,
+                    'attachments' => $attachments,
                 ]);
         } catch (EmailSendException $exception) {
             $deliveryError = $exception->emailLog?->error_message ?: $exception->getPrevious()?->getMessage();

@@ -251,10 +251,23 @@
                 </div>
             </div>
 
+            <div class="inbox-bulk-bar" data-inbox-bulk-bar hidden>
+                <span data-inbox-bulk-count>0 emails</span> selected
+                <form method="POST" action="{{ route('inbox.destroy-bulk') }}" data-inbox-bulk-delete-form data-confirm="Delete selected emails from PowerMail inbox? This removes the local copies only.">
+                    @csrf
+                    @method('DELETE')
+                    <button class="tiny danger" type="submit">Delete selected</button>
+                </form>
+                <button class="secondary tiny" type="button" data-inbox-deselect-all>Deselect all</button>
+            </div>
+
             <div class="table-wrap">
                 <table class="inbox-table">
                     <thead>
                         <tr>
+                            <th class="inbox-check-col">
+                                <input type="checkbox" data-inbox-select-all aria-label="Select all">
+                            </th>
                             <th class="date-column">Date</th>
                             @if (auth()->user()->isAdmin())
                                 <th class="client-column">Client</th>
@@ -266,7 +279,7 @@
                         </tr>
                     </thead>
                     <tbody data-inbox-rows>
-                        @include('admin.inbox.partials.table-body')
+                        @include('admin.inbox.partials.table-body', ['messages' => $messages, 'canSendEmails' => $canSendEmails])
                     </tbody>
                 </table>
             </div>
@@ -411,12 +424,79 @@
             };
 
             window.setInterval(poll, interval);
-            window.setTimeout(poll, 10000);
             document.addEventListener('visibilitychange', () => {
                 if (!document.hidden) {
                     poll();
                 }
             });
+        })();
+
+        // Inbox bulk select
+        (() => {
+            const rows = document.querySelector('[data-inbox-rows]');
+            const bulkBar = document.querySelector('[data-inbox-bulk-bar]');
+            const bulkCountLabel = document.querySelector('[data-inbox-bulk-count]');
+            const bulkDeleteForm = document.querySelector('[data-inbox-bulk-delete-form]');
+            const selectAllCheckbox = document.querySelector('[data-inbox-select-all]');
+            const deselectAllBtn = document.querySelector('[data-inbox-deselect-all]');
+
+            const getChecked = () => [...document.querySelectorAll('[data-inbox-row-check]:checked')];
+            const getAllBoxes = () => [...document.querySelectorAll('[data-inbox-row-check]')];
+
+            const updateBulkBar = () => {
+                const checked = getChecked();
+                const all = getAllBoxes();
+                if (bulkBar) {
+                    bulkBar.hidden = checked.length === 0;
+                }
+                if (bulkCountLabel) {
+                    bulkCountLabel.textContent = checked.length === 1 ? '1 email' : `${checked.length} emails`;
+                }
+                if (selectAllCheckbox) {
+                    selectAllCheckbox.checked = all.length > 0 && all.every(cb => cb.checked);
+                    selectAllCheckbox.indeterminate = checked.length > 0 && checked.length < all.length;
+                }
+            };
+
+            if (selectAllCheckbox) {
+                selectAllCheckbox.addEventListener('change', () => {
+                    getAllBoxes().forEach(cb => { cb.checked = selectAllCheckbox.checked; });
+                    updateBulkBar();
+                });
+            }
+
+            if (deselectAllBtn) {
+                deselectAllBtn.addEventListener('click', () => {
+                    getAllBoxes().forEach(cb => { cb.checked = false; });
+                    if (selectAllCheckbox) { selectAllCheckbox.checked = false; selectAllCheckbox.indeterminate = false; }
+                    updateBulkBar();
+                });
+            }
+
+            if (rows) {
+                rows.addEventListener('change', (e) => {
+                    if (e.target.matches('[data-inbox-row-check]')) {
+                        updateBulkBar();
+                    }
+                });
+                // Reset bulk bar when rows are re-rendered by poll
+                new MutationObserver(updateBulkBar).observe(rows, { childList: true });
+            }
+
+            if (bulkDeleteForm) {
+                bulkDeleteForm.addEventListener('submit', (e) => {
+                    const checked = getChecked();
+                    if (checked.length === 0) { e.preventDefault(); return; }
+                    bulkDeleteForm.querySelectorAll('input[name="ids[]"]').forEach(el => el.remove());
+                    checked.forEach(cb => {
+                        const input = document.createElement('input');
+                        input.type = 'hidden';
+                        input.name = 'ids[]';
+                        input.value = cb.value;
+                        bulkDeleteForm.appendChild(input);
+                    });
+                });
+            }
         })();
     </script>
 @endsection

@@ -22,7 +22,6 @@ Route::get('/email-tracking/open/{emailLog}', [EmailTrackingController::class, '
     ->name('email-tracking.open');
 
 Route::get('/email-tracking/unsubscribe/{marketingContact}/{token}', [EmailTrackingController::class, 'unsubscribe'])
-    ->middleware('signed:relative')
     ->name('email-tracking.unsubscribe');
 
 Route::middleware('guest')->group(function (): void {
@@ -93,6 +92,13 @@ Route::middleware(['auth', 'active.user'])->group(function (): void {
         Route::patch('/marketing/contacts/{marketingContact}/subscribe', [MarketingController::class, 'subscribeContact'])->name('marketing.contacts.subscribe');
         Route::patch('/marketing/contacts/{marketingContact}/unsubscribe', [MarketingController::class, 'unsubscribeContact'])->name('marketing.contacts.unsubscribe');
         Route::delete('/marketing/contacts/{marketingContact}', [MarketingController::class, 'destroyContact'])->name('marketing.contacts.destroy');
+        Route::post('/marketing/lead-generation/preview', [MarketingController::class, 'previewLeadGenerationParse'])->name('marketing.lead-generation.preview');
+        Route::post('/marketing/lead-generation', [MarketingController::class, 'storeLeadGenerationRun'])->name('marketing.lead-generation.store');
+        Route::post('/marketing/lead-generation/{marketingLeadGenerationRun}/import', [MarketingController::class, 'importLeadGenerationRun'])->name('marketing.lead-generation.import');
+        Route::get('/marketing/lead-generation/{marketingLeadGenerationRun}/download', [MarketingController::class, 'downloadLeadGenerationRun'])->name('marketing.lead-generation.download');
+        Route::delete('/marketing/lead-generation/{marketingLeadGenerationRun}/leads', [MarketingController::class, 'destroyLeadGenerationLead'])->name('marketing.lead-generation.leads.destroy');
+        Route::delete('/marketing/lead-generation/{marketingLeadGenerationRun}/leads/bulk', [MarketingController::class, 'destroyLeadGenerationLeads'])->name('marketing.lead-generation.leads.mass-destroy');
+        Route::delete('/marketing/lead-generation/{marketingLeadGenerationRun}', [MarketingController::class, 'destroyLeadGenerationRun'])->name('marketing.lead-generation.destroy');
         Route::post('/marketing/campaigns', [MarketingController::class, 'storeCampaign'])->name('marketing.campaigns.store');
         Route::get('/marketing/campaigns/{marketingCampaign}', [MarketingController::class, 'showCampaign'])->name('marketing.campaigns.show');
         Route::get('/marketing/campaigns/{marketingCampaign}/status', [MarketingController::class, 'campaignStatus'])->name('marketing.campaigns.status');
@@ -112,6 +118,7 @@ Route::middleware(['auth', 'active.user'])->group(function (): void {
         Route::post('/inbox/poll', [InboxController::class, 'poll'])->name('inbox.poll');
         Route::patch('/inbox/{receivedEmail}/opened', [InboxController::class, 'markOpened'])->name('inbox.mark-opened');
         Route::patch('/inbox/{receivedEmail}/unopened', [InboxController::class, 'markUnopened'])->name('inbox.mark-unopened');
+        Route::delete('/inbox/bulk', [InboxController::class, 'destroyBulk'])->name('inbox.destroy-bulk');
         Route::delete('/inbox/{receivedEmail}', [InboxController::class, 'destroy'])->name('inbox.destroy');
         Route::get('/inbox/{receivedEmail}', [InboxController::class, 'show'])->name('inbox.show');
     });

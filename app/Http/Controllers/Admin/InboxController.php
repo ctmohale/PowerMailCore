@@ -302,6 +302,22 @@ class InboxController extends Controller
         return back()->with('success', 'Email deleted from PowerMail inbox.');
     }
 
+    public function destroyBulk(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'ids'   => ['required', 'array', 'min:1', 'max:200'],
+            'ids.*' => ['required', 'integer'],
+        ]);
+
+        $ids = array_map('intval', $request->input('ids'));
+
+        $deleted = $this->scopeEmailAccountData(ReceivedEmail::query())
+            ->whereIn('id', $ids)
+            ->delete();
+
+        return back()->with('success', "Deleted {$deleted} email(s) from PowerMail inbox.");
+    }
+
     /**
      * @return array<string, mixed>
      */

@@ -66,6 +66,38 @@ class MarketingContactImportService
     }
 
     /**
+     * @param  array<int, array<string, mixed>>  $leads
+     * @return array{rows:int,created:int,updated:int,skipped:int,errors:array<int, string>}
+     */
+    public function importStructuredLeads(int $clientId, array $leads, string $source = 'lead_generation'): array
+    {
+        $rows = [
+            ['Email', 'Name', 'Company', 'Phone', 'Tags', 'Source URL', 'Notes'],
+        ];
+
+        foreach ($leads as $lead) {
+            if (! is_array($lead)) {
+                continue;
+            }
+
+            $tags = $lead['tags'] ?? [];
+            $tags = is_array($tags) ? implode(', ', $tags) : (string) $tags;
+
+            $rows[] = [
+                (string) ($lead['email'] ?? ''),
+                (string) ($lead['name'] ?? ''),
+                (string) ($lead['company'] ?? ''),
+                (string) ($lead['phone'] ?? ''),
+                $tags,
+                (string) ($lead['source_url'] ?? ''),
+                (string) ($lead['notes'] ?? ''),
+            ];
+        }
+
+        return $this->importRows($clientId, $rows, $source);
+    }
+
+    /**
      * @param  iterable<int, array<int, string|null>>  $rows
      * @return array{rows:int,created:int,updated:int,skipped:int,errors:array<int, string>}
      */

@@ -19,13 +19,17 @@ class EmailAccountController extends Controller
 {
     use ScopesTenantData;
 
-    public function index(): View
+    public function index(Request $request): View
     {
+        $selectedClientId = $this->isAdmin() ? ($request->integer('client_id') ?: null) : null;
+
         return view('admin.email-accounts.index', [
+            'selectedClientId' => $selectedClientId,
             'clients' => $this->clientsForUser(),
             'domains' => $this->scopeClient(Domain::query()->with('client'))->orderBy('domain')->get(),
             'accounts' => $this->scopeEmailAccounts(EmailAccount::query())
                 ->with(['client', 'domain'])
+                ->when($selectedClientId, fn ($query) => $query->where('client_id', $selectedClientId))
                 ->latest()
                 ->get(),
         ]);

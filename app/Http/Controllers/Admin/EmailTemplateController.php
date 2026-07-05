@@ -15,12 +15,16 @@ class EmailTemplateController extends Controller
 {
     use ScopesTenantData;
 
-    public function index(): View
+    public function index(Request $request): View
     {
+        $selectedClientId = $this->isAdmin() ? ($request->integer('client_id') ?: null) : null;
+
         return view('admin.email-templates.index', [
+            'selectedClientId' => $selectedClientId,
             'clients' => $this->clientsForUser(),
             'templates' => $this->scopeClient(EmailTemplate::query())
                 ->with('client')
+                ->when($selectedClientId, fn ($query) => $query->where('client_id', $selectedClientId))
                 ->latest()
                 ->get(),
         ]);

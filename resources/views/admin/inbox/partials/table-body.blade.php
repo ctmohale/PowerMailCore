@@ -38,6 +38,9 @@
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
     @endphp
     <tr @class(['unopened-row' => $isUnopened]) data-message-id="{{ $message->id }}" data-open-url="{{ route('inbox.show', $message) }}">
+        <td class="inbox-check-col" onclick="event.stopPropagation()">
+            <input type="checkbox" data-inbox-row-check value="{{ $message->id }}" aria-label="Select email">
+        </td>
         <td class="date-column">
             <span class="date-cell compact">
                 @if ($isUnopened)
@@ -119,6 +122,6 @@
     </tr>
 @empty
     <tr>
-        <td colspan="{{ $isAdmin ? 6 : 5 }}" class="muted">No received emails found for your linked inbox accounts.</td>
+        <td colspan="{{ $isAdmin ? 7 : 6 }}" class="muted">No received emails found for your linked inbox accounts.</td>
     </tr>
 @endforelse

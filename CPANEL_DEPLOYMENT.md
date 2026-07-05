@@ -96,7 +96,8 @@ Assign the database user to the database with all privileges.
 Copy `.env.cpanel.example` to `.env` on the server and update:
 
 ```env
-APP_URL=https://mailcore.yourdomain.co.za
+APP_URL=https://powermail.beestack.co.za
+MAIL_TRACKING_URL=https://powermail.beestack.co.za
 DB_DATABASE=cpaneluser_powermail
 DB_USERNAME=cpaneluser_powermail
 DB_PASSWORD=your_mysql_password

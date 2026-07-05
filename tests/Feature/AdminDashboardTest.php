@@ -1250,6 +1250,48 @@ class AdminDashboardTest extends TestCase
         $this->assertTrue($createdUser->emailAccounts()->whereKey($supportAccount->id)->exists());
     }
 
+    public function test_admin_accounts_cannot_be_suspended_or_deleted(): void
+    {
+        $actingAdmin = User::factory()->create();
+        $protectedAdmin = User::factory()->create([
+            'email' => 'protected-admin@example.com',
+            'role' => User::ROLE_ADMIN,
+            'status' => User::STATUS_ACTIVE,
+        ]);
+
+        $this->actingAs($actingAdmin)
+            ->patch(route('users.suspend', $protectedAdmin))
+            ->assertSessionHasErrors('user');
+
+        $this->assertSame(User::STATUS_ACTIVE, $protectedAdmin->fresh()->status);
+
+        $this->actingAs($actingAdmin)
+            ->delete(route('users.destroy', $protectedAdmin))
+            ->assertSessionHasErrors('user');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $protectedAdmin->id,
+            'role' => User::ROLE_ADMIN,
+            'status' => User::STATUS_ACTIVE,
+        ]);
+    }
+
+    public function test_admin_user_rows_do_not_show_suspend_or_delete_actions(): void
+    {
+        $admin = User::factory()->create([
+            'name' => 'PowerMail Admin',
+            'role' => User::ROLE_ADMIN,
+            'status' => User::STATUS_ACTIVE,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('users.index'))
+            ->assertOk()
+            ->assertSee('PowerMail Admin')
+            ->assertDontSee(route('users.suspend', $admin), false)
+            ->assertDontSee(route('users.destroy', $admin), false);
+    }
+
     private function createEmailAccount(array $overrides = []): EmailAccount
     {
         $client = Client::create([
