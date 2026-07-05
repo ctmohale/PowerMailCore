@@ -13,6 +13,7 @@ use App\Models\EmailTemplate;
 use App\Models\MarketingCampaign;
 use App\Models\MarketingContact;
 use App\Models\MarketingLeadGenerationRun;
+use App\Services\CompanyEnrichmentService;
 use App\Services\GoogleBusinessTextParserService;
 use App\Services\MarketingContactImportService;
 use App\Services\MarketingLeadGenerationService;
@@ -403,6 +404,241 @@ class MarketingController extends Controller
                 '_dialog' => 'lead-run-'.$marketingLeadGenerationRun->id,
             ])
             ->with('success', 'Lead removed from this run.');
+    }
+
+    public function enrichLead(Request $request, MarketingLeadGenerationRun $marketingLeadGenerationRun, int $leadIndex): JsonResponse
+    {
+        $this->abortUnlessClientAllowed($marketingLeadGenerationRun->client_id);
+
+        $leads = is_array($marketingLeadGenerationRun->leads) ? $marketingLeadGenerationRun->leads : [];
+
+        if (! array_key_exists($leadIndex, $leads)) {
+            return response()->json(['error' => 'Lead not found.'], 404);
+        }
+
+        $lead    = $leads[$leadIndex];
+        $company = (string) ($lead['company'] ?? '');
+
+        if ($company === '') {
+            return response()->json(['error' => 'Lead has no company name to search.'], 422);
+        }
+
+        if (! filled(config('services.openai.key'))) {
+            return response()->json(['error' => 'OpenAI is not configured.'], 422);
+        }
+
+        try {
+            $enricher  = new CompanyEnrichmentService();
+            $presetUrl = (string) ($lead['source_url'] ?? $lead['website'] ?? '');
+
+            // ── Step 1: Ask OpenAI for verified factual data about the company ──
+            $aiData   = $this->askOpenAiForCompanyData($company, [
+                'phone'    => (string) ($lead['phone'] ?? $lead['phone_number'] ?? ''),
+                'location' => (string) ($lead['location'] ?? ''),
+            ]);
+            $startUrl = $presetUrl !== '' ? $presetUrl : ($aiData['website'] ?? '');
+
+            // ── Step 2: Validate the URL actually resolves before trusting it ──
+            if ($startUrl !== '' && ! $this->urlResolves($startUrl)) {
+                $startUrl = '';
+            }
+
+            if ($startUrl === '') {
+                return response()->json([
+                    'updated' => false,
+                    'error'   => 'AI could not find a verified website for this company.',
+                ], 200);
+            }
+
+            // ── Step 3: Crawl the validated URL for emails, decision maker, phone ──
+            $result = $enricher->findWebsiteAndContacts([
+                'company' => $company,
+                'phone'   => (string) ($lead['phone'] ?? $lead['phone_number'] ?? ''),
+                'address' => (string) ($lead['location'] ?? ''),
+                'website' => $startUrl,
+            ]);
+
+            // Merge any extra fields AI returned that crawling didn't find
+            if (empty($result['primary_email']) && ! empty($aiData['email'])) {
+                $result['primary_email'] = $aiData['email'];
+            }
+            if (empty($result['phone']) && ! empty($aiData['phone'])) {
+                $result['phone'] = $aiData['phone'];
+            }
+            if (empty($result['decision_maker']) && ! empty($aiData['decision_maker'])) {
+                $result['decision_maker'] = $aiData['decision_maker'];
+            }
+            if (! empty($aiData['address'])) {
+                $result['address'] = $aiData['address'];
+            }
+            // Ensure website is always set to the validated URL
+            if (empty($result['website'])) {
+                $result['website'] = $startUrl;
+            }
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'Enrichment error: '.$e->getMessage()], 500);
+        }
+
+        $updated = false;
+
+        if (! empty($result['website']) && empty($lead['source_url']) && empty($lead['website'])) {
+            $lead['website']    = $result['website'];
+            $lead['source_url'] = $result['website'];
+            $updated = true;
+        }
+
+        if (! empty($result['primary_email']) && empty($lead['email'])) {
+            $lead['email'] = $result['primary_email'];
+            $updated = true;
+        }
+
+        if (! empty($result['decision_maker']) && empty($lead['decision_maker'])) {
+            $lead['decision_maker'] = $result['decision_maker'];
+            $updated = true;
+        }
+
+        if (! empty($result['phone']) && empty($lead['phone']) && empty($lead['phone_number'])) {
+            $lead['phone'] = $result['phone'];
+            $updated = true;
+        }
+
+        if (! empty($result['address']) && empty($lead['location']) && empty($lead['address'])) {
+            $lead['location'] = $result['address'];
+            $updated = true;
+        }
+
+        if ($updated) {
+            $leads[$leadIndex] = $lead;
+            $marketingLeadGenerationRun->forceFill(['leads' => array_values($leads)])->save();
+        }
+
+        return response()->json([
+            'updated'        => $updated,
+            'email'          => $lead['email'] ?? null,
+            'website'        => $lead['source_url'] ?? $lead['website'] ?? null,
+            'decision_maker' => $lead['decision_maker'] ?? null,
+            'phone'          => $lead['phone'] ?? $lead['phone_number'] ?? null,
+            'location'       => $lead['location'] ?? null,
+            'status'         => $result['status'] ?? null,
+        ]);
+    }
+
+    /**
+     * Ask OpenAI (with live web search) for factual, verifiable data about a company.
+     * Uses gpt-4o-mini-search-preview — web-capable, same cost tier as gpt-4o-mini.
+     *
+     * @return array{website: string|null, email: string|null, phone: string|null, decision_maker: string|null, address: string|null}
+     */
+    private function askOpenAiForCompanyData(string $company, array $hints = []): array
+    {
+        $apiKey  = (string) config('services.openai.key');
+        $baseUrl = rtrim((string) config('services.openai.base_url', 'https://api.openai.com/v1'), '/');
+
+        // Use the web-search model specifically for enrichment.
+        // gpt-4o-mini-search-preview: same cost as gpt-4o-mini, can browse the internet live.
+        $model = 'gpt-4o-mini-search-preview';
+
+        $hintText = '';
+        if (! empty($hints['phone'])) {
+            $hintText .= ' Known phone: '.$hints['phone'].'.';
+        }
+        if (! empty($hints['location'])) {
+            $hintText .= ' Location: '.$hints['location'].'.';
+        }
+
+        $system = <<<'PROMPT'
+You are a business data researcher with live internet access.
+Search the web for the company the user names, visit their website, and return ONLY a raw JSON object — no markdown, no explanation — with these keys:
+  "website"        – the company's real, live website URL (https://...) confirmed from search results, or null
+  "email"          – a real public contact email found on the company's website, or null
+  "phone"          – a real public phone number found on the company's website, or null
+  "decision_maker" – name and title of a real director/partner/CEO, e.g. "Jane Smith (Managing Partner)", or null
+  "address"        – the company's full physical/registered address as listed on their website or contact page, or null
+
+Rules:
+- Search the web, visit the company's website and contact/about pages, and use ONLY data you can verify.
+- Never invent or guess — return null for anything you cannot confirm.
+- The website must be the company's own domain (not LinkedIn, Facebook, Yelp, or any directory).
+- For address: include street, city, province/state, and postal code if available.
+- Respond with raw JSON only.
+PROMPT;
+
+        $ch = curl_init($baseUrl.'/chat/completions');
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_POST           => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_HTTPHEADER     => [
+                'Authorization: Bearer '.$apiKey,
+                'Content-Type: application/json',
+            ],
+            CURLOPT_POSTFIELDS => json_encode([
+                'model'      => $model,
+                'max_tokens' => 200,
+                // response_format json_object is not supported by search-preview models;
+                // we ask for JSON in the prompt and parse below.
+                'messages' => [
+                    ['role' => 'system', 'content' => $system],
+                    ['role' => 'user', 'content' => 'Find contact details for: '.$company.'.'.$hintText],
+                ],
+            ]),
+        ]);
+
+        $body = (string) (curl_exec($ch) ?: '');
+        curl_close($ch);
+
+        $decoded = json_decode($body, true);
+        $raw     = trim((string) ($decoded['choices'][0]['message']['content'] ?? ''));
+
+        // Strip any markdown code fences the model might add despite instructions
+        $raw  = (string) preg_replace('/^```(?:json)?\s*/i', '', $raw);
+        $raw  = (string) preg_replace('/\s*```$/', '', $raw);
+        $data = json_decode($raw, true);
+
+        if (! is_array($data)) {
+            return ['website' => null, 'email' => null, 'phone' => null, 'decision_maker' => null];
+        }
+
+        $website = isset($data['website']) && is_string($data['website']) && str_starts_with($data['website'], 'http')
+            ? $data['website']
+            : null;
+
+        $email = isset($data['email']) && is_string($data['email']) && filter_var($data['email'], FILTER_VALIDATE_EMAIL)
+            ? strtolower($data['email'])
+            : null;
+
+        return [
+            'website'        => $website,
+            'email'          => $email,
+            'phone'          => (isset($data['phone']) && is_string($data['phone']) && $data['phone'] !== '') ? $data['phone'] : null,
+            'decision_maker' => (isset($data['decision_maker']) && is_string($data['decision_maker']) && $data['decision_maker'] !== '') ? $data['decision_maker'] : null,
+            'address'        => (isset($data['address']) && is_string($data['address']) && $data['address'] !== '') ? $data['address'] : null,
+        ];
+    }
+
+    /**
+     * Check that a URL actually resolves (returns a non-error HTTP response).
+     */
+    private function urlResolves(string $url): bool
+    {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_NOBODY         => true,   // HEAD-only, don't download body
+            CURLOPT_TIMEOUT        => 8,
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS      => 4,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; PowerMailBot/1.0)',
+        ]);
+        curl_exec($ch);
+        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        // Accept 2xx and 3xx; reject 4xx/5xx/0 (unreachable)
+        return $code >= 200 && $code < 400;
     }
 
     public function destroyLeadGenerationLeads(Request $request, MarketingLeadGenerationRun $marketingLeadGenerationRun): RedirectResponse

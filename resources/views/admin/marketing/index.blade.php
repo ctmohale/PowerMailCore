@@ -79,9 +79,14 @@
             align-items: center;
             display: flex;
             flex-wrap: wrap;
-            gap: 0.38rem;
+            gap: 0.5rem;
             justify-content: space-between;
             margin-bottom: 0.35rem;
+        }
+        .lead-bulk-actions-right {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
         .lead-bulk-select {
@@ -101,6 +106,79 @@
             display: inline-flex;
             justify-content: center;
             line-height: 1;
+        }
+
+        /* AI enrich button */
+        .lead-ai-btn {
+            align-items: center;
+            background: #f3f0ff;
+            border: 1px solid #c4b5fd;
+            border-radius: 999px;
+            color: #7c3aed;
+            cursor: pointer;
+            display: inline-flex;
+            font-size: 0.72rem;
+            font-weight: 700;
+            gap: 3px;
+            height: 24px;
+            justify-content: center;
+            letter-spacing: 0.02em;
+            padding: 0 8px 0 5px;
+            transition: background 0.15s, border-color 0.15s, color 0.15s;
+            white-space: nowrap;
+        }
+
+        .lead-ai-btn:hover:not(:disabled) {
+            background: #ede9fe;
+            border-color: #7c3aed;
+            color: #5b21b6;
+        }
+
+        .lead-ai-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.55;
+        }
+
+        .lead-ai-btn .ai-icon {
+            flex-shrink: 0;
+            height: 13px;
+            width: 13px;
+        }
+
+        .lead-ai-btn .ai-spinner-ring {
+            animation: inbox-spin 0.7s linear infinite;
+            border: 2px solid #c4b5fd;
+            border-radius: 50%;
+            border-top-color: #7c3aed;
+            display: none;
+            flex-shrink: 0;
+            height: 12px;
+            width: 12px;
+        }
+
+        .lead-ai-btn.ai-spinning .ai-icon { display: none; }
+        .lead-ai-btn.ai-spinning .ai-spinner-ring { display: block; }
+        .lead-ai-btn.ai-spinning .ai-label { opacity: 0.6; }
+
+        .lead-ai-btn.ai-done {
+            background: #dcfce7;
+            border-color: #86efac;
+            color: #16a34a;
+        }
+
+        .lead-ai-btn.ai-failed {
+            background: #fef2f2;
+            border-color: #fca5a5;
+            color: #dc2626;
+        }
+
+        .lead-ai-row-flash {
+            animation: lead-row-flash 0.7s ease;
+        }
+
+        @keyframes lead-row-flash {
+            0%   { background: #dcfce7; }
+            100% { background: transparent; }
         }
 
         .lead-bulk-select input[type="checkbox"] {
@@ -125,6 +203,36 @@
             background: #fff5f5;
             border-color: #f5c2c7;
             color: #b42318;
+        }
+
+        .lead-bulk-ai-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            background: #f3f0ff;
+            border: 1px solid #c4b5fd;
+            color: #7c3aed;
+            font-size: 0.78rem;
+            line-height: 1.15;
+            min-height: 1.7rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 2rem;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .lead-bulk-ai-btn:hover:not(:disabled) {
+            background: #ede9fe;
+            border-color: #a78bfa;
+        }
+        .lead-bulk-ai-btn:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+        }
+        .lead-bulk-ai-progress {
+            font-size: 0.75rem;
+            color: #7c3aed;
+            font-weight: 500;
+            display: none;
         }
 
         @media (max-width: 980px) {
@@ -1115,7 +1223,14 @@ Website  Directions"
                                                                             </span>
                                                                             Select all on this page
                                                                         </label>
+                                                                        <div class="lead-bulk-actions-right">
+                                                                        <button type="button" class="lead-bulk-ai-btn" data-bulk-ai-enrich="{{ $run->id }}">
+                                                                            <svg width="13" height="13" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M10 2l1.5 4.5L16 8l-4.5 1.5L10 14l-1.5-4.5L4 8l4.5-1.5L10 2z" fill="currentColor"/><path d="M4 13l.8 2.2L7 16l-2.2.8L4 19l-.8-2.2L1 16l2.2-.8L4 13z" fill="currentColor"/></svg>
+                                                                            AI Enrich Selected
+                                                                        </button>
+                                                                        <span class="lead-bulk-ai-progress" data-bulk-ai-progress="{{ $run->id }}"></span>
                                                                         <button class="secondary tiny lead-bulk-delete" type="submit">Delete selected</button>
+                                                                        </div>
                                                                     </div>
                                                                 </form>
                                                                 <div class="table-wrap">
@@ -1153,6 +1268,26 @@ Website  Directions"
                                                                                     @php $siteUrl = $lead['source_url'] ?? $lead['website'] ?? ''; @endphp
                                                                                     <td>@if($siteUrl)<a href="{{ $siteUrl }}" target="_blank" rel="noopener" class="website-link">{{ parse_url($siteUrl, PHP_URL_HOST) ?: $siteUrl }}</a>@else-@endif</td>
                                                                                     <td class="text-right">
+                                                                                        <div class="inline-actions">
+                                                                                        @php $needsEnrich = empty($lead['email']) || (empty($lead['source_url']) && empty($lead['website'])); @endphp
+                                                                                        @if ($needsEnrich)
+                                                                                            <button
+                                                                                                class="lead-ai-btn"
+                                                                                                type="button"
+                                                                                                title="AI: search for missing website &amp; email"
+                                                                                                aria-label="AI enrich this lead"
+                                                                                                data-lead-enrich
+                                                                                                data-enrich-url="{{ route('marketing.lead-generation.leads.enrich', [$run, $leadEntry['index']]) }}"
+                                                                                                data-csrf="{{ csrf_token() }}"
+                                                                                            >
+                                                                                                {{-- Wand + sparkles (modern AI action icon) --}}
+                                                                                                <svg class="ai-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                                                                    <path d="M15 4V2"/><path d="M15 16v-2"/><path d="M8 9h2"/><path d="M20 9h2"/><path d="M17.8 11.8 19 13"/><path d="M15 9h.01"/><path d="M17.8 6.2 19 5"/><path d="m3 21 9-9"/><path d="M12.2 6.2 11 5"/>
+                                                                                                </svg>
+                                                                                                <span class="ai-spinner-ring" aria-hidden="true"></span>
+                                                                                                <span class="ai-label">AI</span>
+                                                                                            </button>
+                                                                                        @endif
                                                                                         <form method="POST" action="{{ route('marketing.lead-generation.leads.destroy', $run) }}" data-confirm="Remove this lead from the run?">
                                                                                             @csrf
                                                                                             @method('DELETE')
@@ -1162,6 +1297,7 @@ Website  Directions"
                                                                                                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>
                                                                                             </button>
                                                                                         </form>
+                                                                                        </div>
                                                                                     </td>
                                                                                 </tr>
                                                                             @empty
@@ -2060,6 +2196,188 @@ Website  Directions"
                     }
                 });
             });
+        // AI lead enrich
+        document.addEventListener('click', async (event) => {
+            const btn = event.target.closest('[data-lead-enrich]');
+            if (!btn || btn.disabled) return;
+
+            const url  = btn.dataset.enrichUrl;
+            const csrf = btn.dataset.csrf;
+            if (!url) return;
+
+            const row = btn.closest('tr');
+            const label = btn.querySelector('.ai-label');
+
+            btn.disabled = true;
+            btn.classList.add('ai-spinning');
+            btn.title = 'AI is searching…';
+            if (label) label.textContent = 'Working…';
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrf,
+                    },
+                    body: JSON.stringify({}),
+                });
+
+                const data = await response.json();
+                btn.classList.remove('ai-spinning');
+
+                if (!response.ok) {
+                    btn.classList.add('ai-failed');
+                    btn.title = data.error || 'AI could not find data';
+                    if (label) label.textContent = 'Failed';
+                    btn.disabled = false;
+                    return;
+                }
+
+                if (data.updated && row) {
+                    // Update email cell
+                    if (data.email) {
+                        const emailCell = row.querySelector('.email-cell');
+                        if (emailCell && (emailCell.textContent.trim() === '-' || emailCell.textContent.trim() === '')) {
+                            emailCell.textContent = data.email;
+                        }
+                    }
+                    // Update website cell — find the td that currently shows '-' and has no other class,
+                    // or the td that contains a .website-link (so we can overwrite a stale placeholder)
+                    if (data.website) {
+                        const allTds = Array.from(row.querySelectorAll('td'));
+                        // Website td is the one before the action td (last td)
+                        const actionTd = allTds[allTds.length - 1];
+                        const websiteTd = allTds[allTds.length - 2];
+                        if (websiteTd && (websiteTd.textContent.trim() === '-' || websiteTd.querySelector('.website-link'))) {
+                            try {
+                                const host = new URL(data.website).hostname;
+                                websiteTd.innerHTML = `<a href="${data.website}" target="_blank" rel="noopener" class="website-link">${host}</a>`;
+                            } catch(e) {}
+                        }
+                    }
+                    // Update meta cells (Category[0], Location[1], Years[2], DecisionMaker[3])
+                    const metaCells = row.querySelectorAll('.lead-meta-cell');
+                    if (data.location && metaCells[1] && (metaCells[1].textContent.trim() === '-' || metaCells[1].textContent.trim() === '')) {
+                        metaCells[1].textContent = data.location;
+                    }
+                    if (data.decision_maker && metaCells[3] && (metaCells[3].textContent.trim() === '-' || metaCells[3].textContent.trim() === '')) {
+                        metaCells[3].textContent = data.decision_maker;
+                    }
+                    // Flash the row green to signal success
+                    row.classList.add('lead-ai-row-flash');
+                    row.addEventListener('animationend', () => row.classList.remove('lead-ai-row-flash'), { once: true });
+
+                    btn.classList.add('ai-done');
+                    btn.title = 'AI enrichment complete';
+                    if (label) label.textContent = 'Done';
+                    window.setTimeout(() => btn.remove(), 2000);
+                } else {
+                    btn.classList.add('ai-failed');
+                    btn.title = 'No new data found for this lead';
+                    if (label) label.textContent = 'No data';
+                    btn.disabled = false;
+                }
+            } catch (err) {
+                btn.classList.remove('ai-spinning');
+                btn.classList.add('ai-failed');
+                btn.title = 'Network error — try again';
+                if (label) label.textContent = 'Error';
+                btn.disabled = false;
+            }
+        });
+
+        // Bulk AI enrich selected leads
+        document.addEventListener('click', async (event) => {
+            const bulkBtn = event.target.closest('[data-bulk-ai-enrich]');
+            if (!bulkBtn || bulkBtn.disabled) return;
+
+            const runId = bulkBtn.dataset.bulkAiEnrich;
+            const progressEl = document.querySelector(`[data-bulk-ai-progress="${runId}"]`);
+
+            // Collect all checked rows for this run
+            const checked = Array.from(
+                document.querySelectorAll(`input[data-lead-checkbox="${runId}"]:checked`)
+            );
+
+            // Filter to rows that have an AI button (i.e. still need enrichment)
+            const targets = checked
+                .map(cb => cb.closest('tr'))
+                .filter(row => row && row.querySelector('[data-lead-enrich]'));
+
+            if (targets.length === 0) {
+                if (progressEl) { progressEl.style.display = 'inline'; progressEl.textContent = 'No rows need enrichment'; setTimeout(() => { progressEl.style.display = 'none'; }, 3000); }
+                return;
+            }
+
+            bulkBtn.disabled = true;
+            let done = 0;
+            const total = targets.length;
+            if (progressEl) { progressEl.style.display = 'inline'; progressEl.textContent = `0 / ${total}`; }
+
+            for (const row of targets) {
+                const aiBtn = row.querySelector('[data-lead-enrich]');
+                if (!aiBtn || aiBtn.disabled) { done++; continue; }
+
+                const url  = aiBtn.dataset.enrichUrl;
+                const csrf = aiBtn.dataset.csrf;
+                if (!url) { done++; continue; }
+
+                const label = aiBtn.querySelector('.ai-label');
+                aiBtn.disabled = true;
+                aiBtn.classList.add('ai-spinning');
+                if (label) label.textContent = 'Working…';
+
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf },
+                        body: JSON.stringify({}),
+                    });
+                    const data = await response.json();
+                    aiBtn.classList.remove('ai-spinning');
+
+                    if (response.ok && data.updated) {
+                        if (data.email) {
+                            const emailCell = row.querySelector('.email-cell');
+                            if (emailCell && (emailCell.textContent.trim() === '-' || emailCell.textContent.trim() === '')) emailCell.textContent = data.email;
+                        }
+                        if (data.website) {
+                            const allTds = Array.from(row.querySelectorAll('td'));
+                            const websiteTd = allTds[allTds.length - 2];
+                            if (websiteTd && (websiteTd.textContent.trim() === '-' || websiteTd.querySelector('.website-link'))) {
+                                try { const host = new URL(data.website).hostname; websiteTd.innerHTML = `<a href="${data.website}" target="_blank" rel="noopener" class="website-link">${host}</a>`; } catch(e) {}
+                            }
+                        }
+                        const metaCells = row.querySelectorAll('.lead-meta-cell');
+                        if (data.location && metaCells[1] && (metaCells[1].textContent.trim() === '-' || metaCells[1].textContent.trim() === '')) metaCells[1].textContent = data.location;
+                        if (data.decision_maker && metaCells[3] && (metaCells[3].textContent.trim() === '-' || metaCells[3].textContent.trim() === '')) metaCells[3].textContent = data.decision_maker;
+                        row.classList.add('lead-ai-row-flash');
+                        row.addEventListener('animationend', () => row.classList.remove('lead-ai-row-flash'), { once: true });
+                        aiBtn.classList.add('ai-done');
+                        if (label) label.textContent = 'Done';
+                        window.setTimeout(() => aiBtn.remove(), 1500);
+                    } else {
+                        aiBtn.classList.add('ai-failed');
+                        if (label) label.textContent = data.updated === false ? 'No data' : 'Failed';
+                        aiBtn.disabled = false;
+                    }
+                } catch (err) {
+                    aiBtn.classList.remove('ai-spinning');
+                    aiBtn.classList.add('ai-failed');
+                    if (label) label.textContent = 'Error';
+                    aiBtn.disabled = false;
+                }
+
+                done++;
+                if (progressEl) progressEl.textContent = `${done} / ${total}`;
+            }
+
+            if (progressEl) { progressEl.textContent = `Done — ${done} enriched`; setTimeout(() => { progressEl.style.display = 'none'; }, 4000); }
+            bulkBtn.disabled = false;
+        });
+
         })();
     </script>
 @endsection

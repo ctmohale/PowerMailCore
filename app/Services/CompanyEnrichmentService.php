@@ -158,8 +158,8 @@ class CompanyEnrichmentService
 
         // ── Build slug variations ─────────────────────────────────────────────
         // Strip bracketed hints like "(Johannesburg)"
-        $clean = (string) preg_replace('/\([^)]+\)/', '', $name);
-        $clean = strtolower((string) preg_replace('/[^a-zA-Z0-9\s]/', ' ', $clean));
+        $clean = (string) preg_replace('/\([^)]+\)/u', '', $name);
+        $clean = mb_strtolower((string) preg_replace('/[^a-zA-Z0-9\s]/u', ' ', $clean));
         $allWords = array_values(array_filter(preg_split('/\s+/', trim($clean)) ?? [], fn (string $w) => $w !== ''));
         $sigWords = array_values(array_filter($allWords, fn (string $w) => strlen($w) > 1 && ! in_array($w, self::STRIP_WORDS, true)));
 
@@ -181,9 +181,10 @@ class CompanyEnrichmentService
 
         // ── Also generate "slug + africa/law/legal" variants for SA firms ──────────
         // e.g. "ENS" → try 'ensafrica', 'enslaw', 'enslegal'
-        $extraSuffixes = ['africa', 'law', 'legal', 'sa', 'attorneys'];
+        // e.g. "BSA Law" → firstWord='bsa' → 'bsalaw', 'bsalegal'
+        $extraSuffixes = ['africa', 'law', 'legal', 'sa', 'attorneys', 'inc'];
         $extraSlugs = [];
-        foreach ([$fullSlug, $abbrev] as $baseSlug) {
+        foreach ([$fullSlug, $abbrev, $firstWord] as $baseSlug) {
             if (strlen($baseSlug) < 2) continue;
             foreach ($extraSuffixes as $suffix) {
                 $extraSlugs[] = $baseSlug.$suffix;
@@ -328,16 +329,24 @@ class CompanyEnrichmentService
         $domainExactShort = false;
 
         // ── Domain vs company name ─
-        $domainBody  = (string) preg_replace('/\.[a-z]{2,6}(\.[a-z]{2,6})?$/', '', $host);
+        // Strip 'www.' before computing to avoid 'www' polluting cleanDomain.
+        $hostNormalized = (string) preg_replace('/^www\./', '', $host);
+        $domainBody  = (string) preg_replace('/\.[a-z]{2,6}(\.[a-z]{2,6})?$/', '', $hostNormalized);
         $cleanDomain = (string) preg_replace('/[^a-z0-9]/', '', $domainBody);
-        $cleanName   = (string) preg_replace('/[^a-z0-9]/', '', $nameLower);
+        // Strip parenthetical location hints like "(Johannesburg)" from the company name
+        // before comparing so "ENS (Johannesburg)" → cleanName="ens" matches "ensafrica".
+        $nameStripped = (string) preg_replace('/\([^)]+\)/', '', $nameLower);
+        $cleanName    = (string) preg_replace('/[^a-z0-9]/', '', $nameStripped);
+        // Also keep the full (unstripped) name for substring checks on compound names
+        // like "BSA Law | Bruno Simão Attorneys" where cleanNameFull contains 'bsalaw'.
+        $cleanNameFull = (string) preg_replace('/[^a-z0-9]/', '', $nameLower);
 
         if ($cleanDomain !== '' && $cleanName !== '') {
             $domainLen = strlen($cleanDomain);
             $nameLen   = strlen($cleanName);
             $ratio     = $domainLen / max($nameLen, 1);
 
-            if ($cleanDomain === $cleanName) {
+            if ($cleanDomain === $cleanName || $cleanDomain === $cleanNameFull) {
                 // For very short domains (e.g. 'ens') require phone OR title match too;
                 // otherwise we'd accept 'ens.com' (an unrelated Russian company) just
                 // because the domain is an exact 3-letter match.
@@ -350,6 +359,13 @@ class CompanyEnrichmentService
                 $domainExactShort = $domainLen < 6;
             } elseif ($ratio >= 0.6 && (str_contains($cleanDomain, $cleanName) || str_contains($cleanName, $cleanDomain))) {
                 $score += 22;
+            } elseif (
+                $domainLen >= 4
+                && (str_contains($cleanName, $cleanDomain) || str_contains($cleanNameFull, $cleanDomain))
+            ) {
+                // Domain is a meaningful substring of the company name.
+                // e.g. 'bsalaw' in 'bsalawbrunosimoattorneys', 'ensafrica' contains 'ens'.
+                $score += 18;
             } elseif (
                 $domainLen > 4 && $nameLen > 4
                 && similar_text($cleanDomain, $cleanName) / max($domainLen, $nameLen) > 0.6
@@ -374,10 +390,18 @@ class CompanyEnrichmentService
         }
 
         // ── Phone match ───────────────────────────────────────────────────────
+        // Normalize both SA formats: 011 xxx xxxx (local) ↔ +27 11 xxx xxxx (international).
         $phoneMatched = false;
         if ($phoneDigits !== '' && strlen($phoneDigits) >= 9 && $html !== '') {
             $bodyDigits = (string) preg_replace('/\D/', '', strip_tags($html));
-            if (str_contains($bodyDigits, $phoneDigits)) {
+            // Build alternate format: 0xx → 27xx, 27xx → 0xx
+            $phoneAlt = $phoneDigits;
+            if (str_starts_with($phoneDigits, '0')) {
+                $phoneAlt = '27'.substr($phoneDigits, 1);
+            } elseif (str_starts_with($phoneDigits, '27') && strlen($phoneDigits) >= 11) {
+                $phoneAlt = '0'.substr($phoneDigits, 2);
+            }
+            if (str_contains($bodyDigits, $phoneDigits) || str_contains($bodyDigits, $phoneAlt)) {
                 $score        += 30;
                 $phoneMatched = true;
                 // Also award the short-domain exact-match bonus we withheld above

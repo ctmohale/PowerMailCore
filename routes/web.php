@@ -96,6 +96,7 @@ Route::middleware(['auth', 'active.user'])->group(function (): void {
         Route::post('/marketing/lead-generation', [MarketingController::class, 'storeLeadGenerationRun'])->name('marketing.lead-generation.store');
         Route::post('/marketing/lead-generation/{marketingLeadGenerationRun}/import', [MarketingController::class, 'importLeadGenerationRun'])->name('marketing.lead-generation.import');
         Route::get('/marketing/lead-generation/{marketingLeadGenerationRun}/download', [MarketingController::class, 'downloadLeadGenerationRun'])->name('marketing.lead-generation.download');
+        Route::post('/marketing/lead-generation/{marketingLeadGenerationRun}/leads/{leadIndex}/enrich', [MarketingController::class, 'enrichLead'])->name('marketing.lead-generation.leads.enrich');
         Route::delete('/marketing/lead-generation/{marketingLeadGenerationRun}/leads', [MarketingController::class, 'destroyLeadGenerationLead'])->name('marketing.lead-generation.leads.destroy');
         Route::delete('/marketing/lead-generation/{marketingLeadGenerationRun}/leads/bulk', [MarketingController::class, 'destroyLeadGenerationLeads'])->name('marketing.lead-generation.leads.mass-destroy');
         Route::delete('/marketing/lead-generation/{marketingLeadGenerationRun}', [MarketingController::class, 'destroyLeadGenerationRun'])->name('marketing.lead-generation.destroy');
