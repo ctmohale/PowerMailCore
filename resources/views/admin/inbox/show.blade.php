@@ -31,7 +31,13 @@
                     data-compose-data="{{ $replyData }}"
                 >Reply</button>
             @endif
-            <a class="button secondary" href="{{ route('inbox.index') }}">Back to Inbox</a>
+            @if ($prevMessageUrl)
+                <a class="button secondary" href="{{ $prevMessageUrl }}" title="Newer email">&#8592; Prev</a>
+            @endif
+            @if ($nextMessageUrl)
+                <a class="button secondary" href="{{ $nextMessageUrl }}" title="Older email">Next &#8594;</a>
+            @endif
+            <a class="button secondary" href="{{ $inboxIndexUrl }}">Back to Inbox</a>
         </div>
     </div>
 

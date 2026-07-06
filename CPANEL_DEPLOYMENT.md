@@ -156,3 +156,17 @@ Password: mailbox password
 ```
 
 Then go to `Inbox` and click `Sync All Accounts`.
+
+## 10. Queue Worker (Automatic — Set Once, Never Again)
+
+**The deploy script registers this automatically.** You only need to do this manually if you skipped the deploy script.
+
+Go to **cPanel → Cron Jobs → Add New Cron Job** and add ONE entry (set to Every Minute):
+
+```
+* * * * * /opt/cpanel/ea-php84/root/usr/bin/php /home/CPANEL_USER/powermail-core/artisan schedule:run >> /dev/null 2>&1
+```
+
+Replace the PHP path with yours (run `which php` in cPanel Terminal) and `CPANEL_USER` with your username.
+
+**That's it — this one cron handles everything**, including campaign sending, forever. You never need to add another cron when new features are added.

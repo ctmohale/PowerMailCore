@@ -107,4 +107,16 @@ fi
 "$PHP_BIN" artisan route:cache
 "$PHP_BIN" artisan view:cache
 
+# ── Laravel Scheduler cron ──────────────────────────────────────────────────
+# One permanent cron entry runs ALL scheduled tasks (queue worker, future tasks).
+# idempotent — only adds if not already present.
+CRON_CMD="* * * * * $PHP_BIN $APP_DIR/artisan schedule:run >> /dev/null 2>&1"
+
+if crontab -l 2>/dev/null | grep -qF "artisan schedule:run"; then
+    echo "Laravel scheduler cron already registered — skipping."
+else
+    ( crontab -l 2>/dev/null; echo "$CRON_CMD" ) | crontab -
+    echo "Laravel scheduler cron registered. The queue worker and all scheduled tasks are now automatic."
+fi
+
 echo "Deployment complete."

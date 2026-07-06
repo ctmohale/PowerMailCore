@@ -235,6 +235,171 @@
             display: none;
         }
 
+        .runs-bulk-actions {
+            align-items: center;
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.4rem;
+        }
+
+        .runs-bulk-select {
+            align-items: center;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: inline-flex;
+            font-size: 0.8rem;
+            font-weight: 600;
+            gap: 0.35rem;
+            margin: 0;
+            user-select: none;
+        }
+
+        .runs-bulk-select input[type="checkbox"] {
+            cursor: pointer;
+            flex-shrink: 0;
+            height: 15px;
+            margin: 0;
+            width: 15px;
+        }
+
+        .runs-bulk-delete {
+            margin: 0;
+        }
+
+        .runs-check-col {
+            text-align: center;
+            width: 2.5rem;
+        }
+
+        .run-row-check {
+            height: 15px;
+            margin: 0;
+            width: 15px;
+        }
+
+        .lead-runs-bulk-inline {
+            align-items: center;
+            display: inline-flex;
+            gap: 0.45rem;
+            margin-left: 0.15rem;
+        }
+
+        .lead-runs-bulk-inline .runs-bulk-select {
+            font-size: 0.76rem;
+            font-weight: 600;
+            line-height: 1;
+        }
+
+        .lead-runs-bulk-inline .runs-bulk-delete {
+            min-height: 1.65rem;
+            padding: 0.18rem 0.46rem;
+        }
+
+        .lead-runs-toolbar {
+            gap: 8px;
+            grid-template-columns: minmax(220px, 320px) auto auto auto auto;
+            white-space: nowrap;
+        }
+
+        .lead-runs-toolbar .marketing-live-search {
+            min-height: 36px;
+            padding: 0 8px 0 12px;
+        }
+
+        .lead-runs-toolbar .marketing-live-search input {
+            min-height: 34px;
+        }
+
+        .lead-runs-toolbar .marketing-live-controls {
+            flex-wrap: nowrap;
+            gap: 2px;
+            padding: 2px;
+        }
+
+        .lead-runs-toolbar .marketing-live-controls label {
+            font-size: 11px;
+            min-height: 30px;
+            padding: 5px 8px;
+        }
+
+        .lead-runs-toolbar .button,
+        .lead-runs-toolbar button.secondary,
+        .lead-runs-toolbar .runs-bulk-delete {
+            min-height: 32px;
+            padding: 0.22rem 0.55rem;
+        }
+
+        .lead-runs-toolbar .lead-runs-bulk-inline {
+            margin-left: 0;
+        }
+
+        .contacts-bulk-inline {
+            align-items: center;
+            display: inline-flex;
+            gap: 0.45rem;
+            margin-left: 0.1rem;
+        }
+
+        .contacts-bulk-inline .runs-bulk-select {
+            font-size: 0.76rem;
+            font-weight: 600;
+            line-height: 1;
+        }
+
+        .contacts-bulk-inline .runs-bulk-delete {
+            min-height: 1.65rem;
+            padding: 0.18rem 0.46rem;
+        }
+
+        .contacts-toolbar {
+            gap: 8px;
+            grid-template-columns: minmax(220px, 320px) auto auto auto;
+            white-space: nowrap;
+        }
+
+        .contacts-toolbar .marketing-live-search {
+            min-height: 36px;
+            padding: 0 8px 0 12px;
+        }
+
+        .contacts-toolbar .marketing-live-search input {
+            min-height: 34px;
+        }
+
+        .contacts-toolbar .marketing-live-controls {
+            flex-wrap: nowrap;
+            gap: 2px;
+            padding: 2px;
+        }
+
+        .contacts-toolbar .marketing-live-controls label {
+            font-size: 11px;
+            min-height: 30px;
+            padding: 5px 8px;
+        }
+
+        .contacts-toolbar .button,
+        .contacts-toolbar button.secondary,
+        .contacts-toolbar .runs-bulk-delete {
+            min-height: 32px;
+            padding: 0.22rem 0.55rem;
+        }
+
+        .contacts-toolbar .contacts-bulk-inline {
+            margin-left: 0;
+        }
+
+        .contacts-check-col {
+            text-align: center;
+            width: 2.5rem;
+        }
+
+        .contact-row-check {
+            height: 15px;
+            margin: 0;
+            width: 15px;
+        }
+
         @media (max-width: 980px) {
             .lead-modal-filter {
                 grid-template-columns: 1fr;
@@ -438,7 +603,7 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                         </div>
                     </div>
 
-                    <form class="marketing-live-filter" method="GET" action="{{ route('marketing.index') }}" data-live-contact-filter>
+                    <form class="marketing-live-filter contacts-toolbar" method="GET" action="{{ route('marketing.index') }}" data-live-contact-filter>
                         <input type="hidden" name="tab" value="contacts">
                         <div class="marketing-live-search">
                             <label class="sr-only" for="contacts-live-q">Search contacts</label>
@@ -467,6 +632,18 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                             </label>
                         </div>
                         <button class="secondary" type="button" data-open-dialog="filter-contacts-dialog">Advanced</button>
+                        <div class="contacts-bulk-inline" data-skip-live-filter>
+                            <label class="runs-bulk-select" for="contacts-select-all">
+                                <input type="checkbox" id="contacts-select-all">
+                                Select all
+                            </label>
+                            <button type="submit" form="contacts-bulk-form" class="lead-bulk-delete runs-bulk-delete secondary tiny" id="contacts-bulk-delete-btn" disabled>Delete selected</button>
+                        </div>
+                    </form>
+
+                    <form id="contacts-bulk-form" method="POST" action="{{ route('marketing.contacts.bulk-destroy') }}" data-confirm="Delete the selected contacts? This cannot be undone.">
+                        @csrf
+                        @method('DELETE')
                     </form>
 
                     <div data-contact-results>
@@ -474,6 +651,7 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                             <table class="marketing-table">
                             <thead>
                                 <tr>
+                                    <th class="contacts-check-col"></th>
                                     <th>Email</th>
                                     <th>Decision Maker</th>
                                     <th>Cell</th>
@@ -511,6 +689,9 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                                         ]);
                                     @endphp
                                     <tr>
+                                        <td class="contacts-check-col" onclick="event.stopPropagation()">
+                                            <input type="checkbox" class="contact-row-check" name="contact_ids[]" value="{{ $contact->id }}" form="contacts-bulk-form">
+                                        </td>
                                         <td class="wrap">{{ $contact->email }}</td>
                                         <td>
                                             <span class="marketing-contact-main">{{ $decisionMaker ?: '-' }}</span>
@@ -737,7 +918,7 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="9" class="marketing-empty">No contacts yet. Add a contact or import a contacts file to build your audience.</td>
+                                        <td colspan="10" class="marketing-empty">No contacts yet. Add a contact or import a contacts file to build your audience.</td>
                                     </tr>
                                 @endforelse
                             </tbody>
@@ -805,7 +986,7 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                         </div>
                     </div>
 
-                    <form class="marketing-live-filter" method="GET" action="{{ route('marketing.index') }}" data-live-lead-filter>
+                    <form class="marketing-live-filter lead-runs-toolbar" method="GET" action="{{ route('marketing.index') }}" data-live-lead-filter>
                         <input type="hidden" name="tab" value="lead-generation">
                         <div class="marketing-live-search">
                             <label class="sr-only" for="lead-runs-live-q">Search lead generation runs</label>
@@ -838,6 +1019,13 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                         @if ($leadFilterActive)
                             <a class="button secondary" href="{{ route('marketing.index', ['tab' => 'lead-generation']) }}">Reset</a>
                         @endif
+                        <div class="lead-runs-bulk-inline" data-skip-live-filter>
+                            <label class="runs-bulk-select" for="runs-select-all">
+                                <input type="checkbox" id="runs-select-all">
+                                Select all
+                            </label>
+                            <button type="submit" form="runs-bulk-form" class="lead-bulk-delete runs-bulk-delete secondary tiny" id="runs-bulk-delete-btn" disabled>Delete selected</button>
+                        </div>
                     </form>
 
                     <dialog class="edit-dialog" id="compose-research-dialog" data-auto-open="{{ request()->input('_dialog') === 'compose-research-dialog' ? 'true' : 'false' }}">
@@ -925,9 +1113,14 @@ Website  Directions"
                     </dialog>
 
                     <div class="table-wrap">
+                        <form id="runs-bulk-form" method="POST" action="{{ route('marketing.lead-generation.bulk-destroy') }}" data-confirm="Delete the selected runs? This cannot be undone.">
+                            @csrf
+                            @method('DELETE')
+                        </form>
                         <table class="marketing-table">
                             <thead>
                                 <tr>
+                                    <th class="runs-check-col"></th>
                                     <th>Brief</th>
                                     @if (auth()->user()->isAdmin())
                                         <th>Client</th>
@@ -942,6 +1135,9 @@ Website  Directions"
                             <tbody>
                                 @forelse ($leadGenerationRuns as $run)
                                     <tr>
+                                        <td class="runs-check-col" onclick="event.stopPropagation()">
+                                            <input type="checkbox" name="run_ids[]" value="{{ $run->id }}" form="runs-bulk-form" class="run-row-check">
+                                        </td>
                                         <td>
                                             <strong>{{ Str::limit($run->prompt, 72) }}</strong>
                                             <div class="muted">{{ collect([$run->industry, $run->location])->filter()->implode(' | ') ?: 'General research' }}</div>
@@ -1358,7 +1554,7 @@ Website  Directions"
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="{{ auth()->user()->isAdmin() ? 6 : 5 }}" class="marketing-empty">No lead generation runs yet.</td>
+                                        <td colspan="{{ auth()->user()->isAdmin() ? 7 : 6 }}" class="marketing-empty">No lead generation runs yet.</td>
                                     </tr>
                                 @endforelse
                             </tbody>
@@ -1964,6 +2160,17 @@ Website  Directions"
                     results.innerHTML = nextResults.innerHTML;
                     initContactPreviews(results);
 
+                    const contactsSelectAll = document.getElementById('contacts-select-all');
+                    const contactsDeleteBtn = document.getElementById('contacts-bulk-delete-btn');
+                    if (contactsSelectAll) {
+                        contactsSelectAll.checked = false;
+                        contactsSelectAll.indeterminate = false;
+                    }
+                    if (contactsDeleteBtn) {
+                        contactsDeleteBtn.disabled = true;
+                        contactsDeleteBtn.textContent = 'Delete selected';
+                    }
+
                     if (nextMeta && currentMeta) {
                         currentMeta.textContent = nextMeta.textContent;
                     }
@@ -1987,6 +2194,10 @@ Website  Directions"
                 setStatusLabels(form);
 
                 form.addEventListener('input', (event) => {
+                    if (event.target.closest('[data-skip-live-filter]')) {
+                        return;
+                    }
+
                     if (!event.target.matches('input[type="search"], input[name="q"]')) {
                         return;
                     }
@@ -1997,7 +2208,11 @@ Website  Directions"
                     }, 260);
                 });
 
-                form.addEventListener('change', () => {
+                form.addEventListener('change', (event) => {
+                    if (event.target.closest('[data-skip-live-filter]')) {
+                        return;
+                    }
+
                     window.clearTimeout(contactFilterTimer);
                     loadContactResults(liveFilterUrl(form));
                 });
@@ -2061,7 +2276,11 @@ Website  Directions"
                     }, 260);
                 });
 
-                form.addEventListener('change', () => {
+                form.addEventListener('change', (event) => {
+                    if (event.target.closest('[data-skip-live-filter]')) {
+                        return;
+                    }
+
                     window.clearTimeout(leadGenerationFilterTimer);
                     window.location.href = leadGenerationFilterUrl(form);
                 });
@@ -2377,6 +2596,68 @@ Website  Directions"
             if (progressEl) { progressEl.textContent = `Done — ${done} enriched`; setTimeout(() => { progressEl.style.display = 'none'; }, 4000); }
             bulkBtn.disabled = false;
         });
+
+        // Bulk select/delete for lead generation runs table
+        (() => {
+            const contactsSelectAll = document.getElementById('contacts-select-all');
+            const contactsDeleteBtn = document.getElementById('contacts-bulk-delete-btn');
+
+            const syncContactsBulk = () => {
+                if (!contactsSelectAll || !contactsDeleteBtn) {
+                    return;
+                }
+
+                const checks = Array.from(document.querySelectorAll('input.contact-row-check'));
+                const checked = checks.filter((cb) => cb.checked);
+
+                contactsDeleteBtn.disabled = checked.length === 0;
+                contactsDeleteBtn.textContent = checked.length > 0 ? `Delete selected (${checked.length})` : 'Delete selected';
+
+                contactsSelectAll.checked = checks.length > 0 && checked.length === checks.length;
+                contactsSelectAll.indeterminate = checked.length > 0 && checked.length < checks.length;
+            };
+
+            contactsSelectAll?.addEventListener('change', () => {
+                document.querySelectorAll('input.contact-row-check').forEach((checkbox) => {
+                    checkbox.checked = contactsSelectAll.checked;
+                });
+                syncContactsBulk();
+            });
+
+            document.addEventListener('change', (event) => {
+                if (event.target.matches('input.contact-row-check')) {
+                    syncContactsBulk();
+                }
+            });
+
+            syncContactsBulk();
+
+            const selectAll = document.getElementById('runs-select-all');
+            const deleteBtn = document.getElementById('runs-bulk-delete-btn');
+            if (!selectAll || !deleteBtn) return;
+
+            const getChecks = () => Array.from(document.querySelectorAll('input.run-row-check'));
+
+            const syncDeleteBtn = () => {
+                const checked = getChecks().filter(cb => cb.checked);
+                deleteBtn.disabled = checked.length === 0;
+                deleteBtn.textContent = checked.length > 0 ? `Delete selected (${checked.length})` : 'Delete selected';
+            };
+
+            selectAll.addEventListener('change', () => {
+                getChecks().forEach(cb => { cb.checked = selectAll.checked; });
+                syncDeleteBtn();
+            });
+
+            document.addEventListener('change', (e) => {
+                if (e.target.classList.contains('run-row-check')) {
+                    const all = getChecks();
+                    selectAll.checked = all.length > 0 && all.every(cb => cb.checked);
+                    selectAll.indeterminate = all.some(cb => cb.checked) && !all.every(cb => cb.checked);
+                    syncDeleteBtn();
+                }
+            });
+        })();
 
         })();
     </script>

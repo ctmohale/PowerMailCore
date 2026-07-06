@@ -13,6 +13,7 @@ use App\Services\InboxSyncService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\View\View;
 use RuntimeException;
 
@@ -57,6 +58,7 @@ class InboxController extends Controller
             'meta_html' => view('admin.inbox.partials.meta', $data)->render(),
             'total' => $data['messages']->total(),
             'unopened_count' => $data['unopenedCount'],
+            'junk_count' => $data['junkCount'],
             'folder_counts' => $folderCounts,
             'account_counts' => collect(['all' => $data['accounts']->sum('received_emails_count')])
                 ->merge($data['accounts']->mapWithKeys(fn (EmailAccount $account): array => [
@@ -227,6 +229,8 @@ class InboxController extends Controller
                 'opened_at' => now(),
                 'seen' => true,
             ])->save();
+
+            Cache::forget('layout.unopened_count.'.$request->user()->id);
         }
 
         $canSendEmails = $request->user()->canAccess(User::PERMISSION_SEND_EMAILS);
@@ -258,6 +262,10 @@ class InboxController extends Controller
                 : $composeAccounts->first()?->id;
         }
 
+        $inboxQuery = $this->inboxQueryParameters($request);
+        $prevMessage = $this->adjacentMessage($request, $receivedEmail, 'previous');
+        $nextMessage = $this->adjacentMessage($request, $receivedEmail, 'next');
+
         return view('admin.inbox.show', [
             'message' => $receivedEmail->load(['client', 'domain', 'emailAccount']),
             'canSendEmails' => $canSendEmails,
@@ -266,10 +274,16 @@ class InboxController extends Controller
             'defaultTemplateId' => $defaultTemplateId,
             'selectedComposeAccountId' => $selectedComposeAccountId,
             'selectedTemplateId' => $defaultTemplateId,
+            'prevMessage' => $prevMessage,
+            'nextMessage' => $nextMessage,
+            'inboxQuery' => $inboxQuery,
+            'prevMessageUrl' => $prevMessage ? route('inbox.show', [$prevMessage] + $inboxQuery) : null,
+            'nextMessageUrl' => $nextMessage ? route('inbox.show', [$nextMessage] + $inboxQuery) : null,
+            'inboxIndexUrl' => route('inbox.index', $inboxQuery),
         ]);
     }
 
-    public function markOpened(ReceivedEmail $receivedEmail): RedirectResponse
+    public function markOpened(Request $request, ReceivedEmail $receivedEmail): RedirectResponse
     {
         $this->abortUnlessEmailAccountAllowed($receivedEmail->client_id, $receivedEmail->email_account_id);
 
@@ -278,10 +292,12 @@ class InboxController extends Controller
             'seen' => true,
         ])->save();
 
+        Cache::forget('layout.unopened_count.'.$request->user()->id);
+
         return back()->with('success', 'Email marked as opened.');
     }
 
-    public function markUnopened(ReceivedEmail $receivedEmail): RedirectResponse
+    public function markUnopened(Request $request, ReceivedEmail $receivedEmail): RedirectResponse
     {
         $this->abortUnlessEmailAccountAllowed($receivedEmail->client_id, $receivedEmail->email_account_id);
 
@@ -289,6 +305,8 @@ class InboxController extends Controller
             'opened_at' => null,
             'seen' => false,
         ])->save();
+
+        Cache::forget('layout.unopened_count.'.$request->user()->id);
 
         return back()->with('success', 'Email marked as unopened.');
     }
@@ -391,10 +409,13 @@ class InboxController extends Controller
             'templates' => $templates,
             'defaultTemplateId' => $defaultTemplateId,
             'canSendEmails' => $canSendEmails,
+            'inboxQuery' => $this->inboxQueryParameters($request),
             'mailboxTypes' => ['all' => 'All mail'] + ImapMailboxClient::mailboxTypeOptions(),
             'selectedMailboxType' => $selectedMailboxType,
             'folderCounts' => $folderCountsQuery->pluck('aggregate', 'mailbox_type'),
             'unopenedCount' => $unopenedCount,
+            'junkCount' => $this->scopeEmailAccountData(ReceivedEmail::query())->where('is_junk', true)->count(),
+            'selectedJunk' => $request->input('junk', ''),
             'messages' => $query->paginate(10)->withQueryString(),
             'imapEnabled' => function_exists('imap_open'),
             'imapDiagnostics' => [
@@ -430,7 +451,55 @@ class InboxController extends Controller
             default => null,
         };
 
+        // Default: hide junk. Pass ?junk=1 to show junk only, ?junk=all to show everything.
+        match ($request->input('junk')) {
+            '1'   => $query->where('is_junk', true),
+            'all' => null,
+            default => $query->where('is_junk', false),
+        };
+
         return $query;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function inboxQueryParameters(Request $request): array
+    {
+        return array_filter([
+            'client_id' => $this->isAdmin() ? $request->input('client_id') : null,
+            'email_account_id' => $request->input('email_account_id'),
+            'mailbox' => $request->input('mailbox'),
+            'opened' => $request->input('opened'),
+            'junk' => $request->input('junk'),
+            'page' => $request->input('page'),
+        ], fn ($value): bool => filled($value));
+    }
+
+    private function adjacentMessage(Request $request, ReceivedEmail $receivedEmail, string $direction): ?ReceivedEmail
+    {
+        $query = $this->messageQuery($request, $this->selectedMailboxType($request))
+            ->whereKeyNot($receivedEmail->id);
+
+        if ($receivedEmail->received_at) {
+            $operator = $direction === 'previous' ? '>' : '<';
+            $idOperator = $direction === 'previous' ? '>' : '<';
+
+            $query->where(function ($query) use ($receivedEmail, $operator, $idOperator): void {
+                $query->where('received_at', $operator, $receivedEmail->received_at)
+                    ->orWhere(function ($query) use ($receivedEmail, $idOperator): void {
+                        $query->where('received_at', $receivedEmail->received_at)
+                            ->where('id', $idOperator, $receivedEmail->id);
+                    });
+            });
+        } else {
+            $operator = $direction === 'previous' ? '>' : '<';
+            $query->where('id', $operator, $receivedEmail->id);
+        }
+
+        return $direction === 'previous'
+            ? $query->orderBy('received_at')->orderBy('id')->first()
+            : $query->orderByDesc('received_at')->orderByDesc('id')->first();
     }
 
     /**

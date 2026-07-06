@@ -11,6 +11,7 @@ use App\Models\ReceivedEmail;
 use App\Models\User;
 use App\Services\ImapMailboxClient;
 use App\Services\InboxSyncService;
+use App\Services\EmailSpamClassifier;
 use App\Services\SmtpMailer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -343,7 +344,7 @@ class AdminDashboardTest extends TestCase
             }
         };
 
-        $result = (new InboxSyncService($mailbox))->syncAccount($account);
+        $result = (new InboxSyncService($mailbox, new EmailSpamClassifier))->syncAccount($account);
 
         $this->assertSame(1, $result['imported']);
         $this->assertSame(1, ReceivedEmail::count());
@@ -929,6 +930,72 @@ class AdminDashboardTest extends TestCase
             ->assertSee('Opened');
     }
 
+    public function test_inbox_detail_navigation_stays_with_assigned_accounts(): void
+    {
+        $account = $this->createEmailAccount([
+            'inbox_enabled' => true,
+            'imap_host' => 'mail.beestack.co.za',
+            'imap_username' => 'info@beestack.co.za',
+            'imap_password' => 'secret',
+        ]);
+
+        $supportAccount = EmailAccount::create([
+            'client_id' => $account->client_id,
+            'domain_id' => $account->domain_id,
+            'email' => 'support@beestack.co.za',
+            'from_name' => 'BeeStack Support',
+            'smtp_host' => 'mail.beestack.co.za',
+            'smtp_port' => 587,
+            'smtp_encryption' => EmailAccount::ENCRYPTION_STARTTLS,
+            'smtp_username' => 'support@beestack.co.za',
+            'smtp_password' => 'secret',
+            'is_active' => true,
+            'inbox_enabled' => true,
+        ]);
+        $receivedAt = now();
+
+        $message = ReceivedEmail::create([
+            'client_id' => $account->client_id,
+            'domain_id' => $account->domain_id,
+            'email_account_id' => $account->id,
+            'uid' => 51,
+            'from_email' => 'client@example.com',
+            'to_email' => $account->email,
+            'subject' => 'Assigned detail message',
+            'size' => 1024,
+            'seen' => false,
+            'received_at' => $receivedAt,
+            'fetched_at' => now(),
+        ]);
+
+        $hiddenMessage = ReceivedEmail::create([
+            'client_id' => $supportAccount->client_id,
+            'domain_id' => $supportAccount->domain_id,
+            'email_account_id' => $supportAccount->id,
+            'uid' => 52,
+            'from_email' => 'hidden@example.com',
+            'to_email' => $supportAccount->email,
+            'subject' => 'Hidden detail message',
+            'size' => 1024,
+            'seen' => false,
+            'received_at' => $receivedAt,
+            'fetched_at' => now(),
+        ]);
+
+        $user = User::factory()->create([
+            'client_id' => $account->client_id,
+            'role' => User::ROLE_CLIENT_USER,
+            'permissions' => User::defaultClientPermissions(),
+        ]);
+        $user->emailAccounts()->sync([$account->id]);
+
+        $this->actingAs($user)
+            ->get('/inbox/'.$message->id)
+            ->assertOk()
+            ->assertSee('Assigned detail message')
+            ->assertDontSee('/inbox/'.$hiddenMessage->id, false);
+    }
+
     public function test_inbox_poll_syncs_latest_mail_without_refreshing_the_page(): void
     {
         $user = User::factory()->create();
@@ -1052,7 +1119,7 @@ class AdminDashboardTest extends TestCase
             ->assertRedirect()
             ->assertSessionHasNoErrors();
 
-        $this->assertDatabaseMissing('received_emails', [
+        $this->assertSoftDeleted('received_emails', [
             'id' => $message->id,
         ]);
     }

@@ -700,6 +700,25 @@ PROMPT;
             ->with('success', 'Lead generation run deleted.');
     }
 
+    public function bulkDestroyLeadGenerationRuns(Request $request): RedirectResponse
+    {
+        $ids = array_map('intval', array_filter((array) $request->input('run_ids', [])));
+
+        if (empty($ids) || count($ids) > 200) {
+            return redirect()
+                ->route('marketing.index', ['tab' => 'lead-generation'])
+                ->with('error', 'Select between 1 and 200 runs to delete.');
+        }
+
+        $this->scopeClient(MarketingLeadGenerationRun::query())
+            ->whereIn('id', $ids)
+            ->delete();
+
+        return redirect()
+            ->route('marketing.index', ['tab' => 'lead-generation'])
+            ->with('success', count($ids).' lead generation run'.((count($ids) > 1) ? 's' : '').' deleted.');
+    }
+
     public function subscribeContact(MarketingContact $marketingContact): RedirectResponse
     {
         $this->abortUnlessClientAllowed($marketingContact->client_id);
@@ -732,6 +751,21 @@ PROMPT;
         $marketingContact->delete();
 
         return back()->with('success', 'Marketing contact deleted.');
+    }
+
+    public function bulkDestroyContacts(Request $request): RedirectResponse
+    {
+        $ids = array_map('intval', array_filter((array) $request->input('contact_ids', [])));
+
+        if (empty($ids) || count($ids) > 500) {
+            return back()->with('error', 'Select between 1 and 500 contacts to delete.');
+        }
+
+        $deleted = $this->scopeClient(MarketingContact::query())
+            ->whereIn('id', $ids)
+            ->delete();
+
+        return back()->with('success', $deleted.' marketing contact'.($deleted === 1 ? '' : 's').' deleted.');
     }
 
     public function sendContactEmail(
@@ -902,11 +936,14 @@ PROMPT;
         ]);
 
         if ($request->boolean('send_now')) {
-            DispatchMarketingCampaignJob::dispatch($campaign->id)->onQueue('marketing');
+            // Run the dispatch job synchronously so the campaign transitions to STATUS_SENDING
+            // immediately and recipient jobs are queued before we redirect.
+            // Individual SendMarketingCampaignRecipientJobs are then processed by the queue worker.
+            (new DispatchMarketingCampaignJob($campaign->id))->handle();
 
             return redirect()
                 ->route('marketing.campaigns.show', $campaign)
-                ->with('success', 'Campaign queued. Delivery will continue in the background.');
+                ->with('success', 'Campaign is now sending. Emails are being delivered in the background.');
         }
 
         return redirect()
@@ -944,9 +981,11 @@ PROMPT;
             ]);
         }
 
-        DispatchMarketingCampaignJob::dispatch($marketingCampaign->id)->onQueue('marketing');
+        // Run the dispatch job synchronously so the campaign transitions to STATUS_SENDING
+        // and all recipient jobs are queued before we redirect.
+        (new DispatchMarketingCampaignJob($marketingCampaign->id))->handle();
 
-        return back()->with('success', 'Campaign queued. Delivery will continue in the background.');
+        return back()->with('success', 'Campaign is now sending. Emails are being delivered in the background.');
     }
 
     public function campaignStatus(MarketingCampaign $marketingCampaign): JsonResponse

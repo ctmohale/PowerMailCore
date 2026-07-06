@@ -4,6 +4,7 @@
 
 @forelse ($messages as $message)
     @php
+        $messageRoute = route('inbox.show', [$message] + ($inboxQuery ?? []));
         $isUnopened = blank($message->getRawOriginal('opened_at'));
         $subject = $message->subject ?: '(no subject)';
         $shortSubject = (string) str($subject)->limit(54);
@@ -37,7 +38,7 @@
             'forwarded_body' => $forwardedBody,
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
     @endphp
-    <tr @class(['unopened-row' => $isUnopened]) data-message-id="{{ $message->id }}" data-open-url="{{ route('inbox.show', $message) }}">
+    <tr @class(['unopened-row' => $isUnopened]) data-message-id="{{ $message->id }}" data-open-url="{{ $messageRoute }}">
         <td class="inbox-check-col" onclick="event.stopPropagation()">
             <input type="checkbox" data-inbox-row-check value="{{ $message->id }}" aria-label="Select email">
         </td>
@@ -64,7 +65,7 @@
         <td class="status-cell"><span @class(['badge' => true, 'pending' => $isUnopened, 'opened' => ! $isUnopened])>{{ $isUnopened ? 'Unopened' : 'Opened' }}</span></td>
         <td class="actions-cell">
             <div class="inline-actions">
-                <a class="mail-icon-action" href="{{ route('inbox.show', $message) }}" aria-label="Open" title="Open">
+                <a class="mail-icon-action" href="{{ $messageRoute }}" aria-label="Open" title="Open">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="3"/></svg>
                 </a>
                 @if ($canSendEmails && $message->from_email)

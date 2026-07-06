@@ -4,11 +4,15 @@ namespace App\Services;
 
 use App\Models\EmailAccount;
 use App\Models\ReceivedEmail;
+use App\Services\EmailSpamClassifier;
 use RuntimeException;
 
 class InboxSyncService
 {
-    public function __construct(private readonly ImapMailboxClient $mailboxClient) {}
+    public function __construct(
+        private readonly ImapMailboxClient $mailboxClient,
+        private readonly EmailSpamClassifier $spamClassifier,
+    ) {}
 
     /**
      * Sync the latest messages for one configured inbox.
@@ -124,6 +128,20 @@ class InboxSyncService
         foreach ($messages as $message) {
             $mailbox = (string) ($message['mailbox'] ?? 'INBOX');
 
+            // Skip messages that were permanently deleted by the user
+            $isDeleted = ReceivedEmail::withTrashed()
+                ->where('email_account_id', $account->id)
+                ->where('mailbox', $mailbox)
+                ->where('uid', $message['uid'])
+                ->whereNotNull('deleted_at')
+                ->exists();
+
+            if ($isDeleted) {
+                $skipped++;
+                $latestUid = max((int) $latestUid, (int) $message['uid']);
+                continue;
+            }
+
             $receivedEmail = ReceivedEmail::updateOrCreate(
                 [
                     'email_account_id' => $account->id,
@@ -146,6 +164,7 @@ class InboxSyncService
                     'raw_headers' => $message['raw_headers'] ?? null,
                     'size' => $message['size'] ?? 0,
                     'seen' => $message['seen'] ?? false,
+                    'is_junk' => $this->spamClassifier->isJunk($message),
                     'received_at' => $message['received_at'] ?? null,
                     'fetched_at' => now(),
                 ],

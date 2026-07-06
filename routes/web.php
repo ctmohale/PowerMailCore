@@ -89,6 +89,7 @@ Route::middleware(['auth', 'active.user'])->group(function (): void {
         Route::post('/marketing/contacts', [MarketingController::class, 'storeContact'])->name('marketing.contacts.store');
         Route::post('/marketing/contacts/import', [MarketingController::class, 'importContacts'])->name('marketing.contacts.import');
         Route::post('/marketing/contacts/{marketingContact}/send-email', [MarketingController::class, 'sendContactEmail'])->name('marketing.contacts.send-email');
+        Route::delete('/marketing/contacts/bulk', [MarketingController::class, 'bulkDestroyContacts'])->name('marketing.contacts.bulk-destroy');
         Route::patch('/marketing/contacts/{marketingContact}/subscribe', [MarketingController::class, 'subscribeContact'])->name('marketing.contacts.subscribe');
         Route::patch('/marketing/contacts/{marketingContact}/unsubscribe', [MarketingController::class, 'unsubscribeContact'])->name('marketing.contacts.unsubscribe');
         Route::delete('/marketing/contacts/{marketingContact}', [MarketingController::class, 'destroyContact'])->name('marketing.contacts.destroy');
@@ -100,6 +101,7 @@ Route::middleware(['auth', 'active.user'])->group(function (): void {
         Route::delete('/marketing/lead-generation/{marketingLeadGenerationRun}/leads', [MarketingController::class, 'destroyLeadGenerationLead'])->name('marketing.lead-generation.leads.destroy');
         Route::delete('/marketing/lead-generation/{marketingLeadGenerationRun}/leads/bulk', [MarketingController::class, 'destroyLeadGenerationLeads'])->name('marketing.lead-generation.leads.mass-destroy');
         Route::delete('/marketing/lead-generation/{marketingLeadGenerationRun}', [MarketingController::class, 'destroyLeadGenerationRun'])->name('marketing.lead-generation.destroy');
+        Route::delete('/marketing/lead-generation-bulk', [MarketingController::class, 'bulkDestroyLeadGenerationRuns'])->name('marketing.lead-generation.bulk-destroy');
         Route::post('/marketing/campaigns', [MarketingController::class, 'storeCampaign'])->name('marketing.campaigns.store');
         Route::get('/marketing/campaigns/{marketingCampaign}', [MarketingController::class, 'showCampaign'])->name('marketing.campaigns.show');
         Route::get('/marketing/campaigns/{marketingCampaign}/status', [MarketingController::class, 'campaignStatus'])->name('marketing.campaigns.status');

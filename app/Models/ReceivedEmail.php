@@ -5,10 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ReceivedEmail extends Model
 {
-    use HasFactory;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'client_id',
@@ -29,6 +30,7 @@ class ReceivedEmail extends Model
         'raw_headers',
         'size',
         'seen',
+        'is_junk',
         'opened_at',
         'received_at',
         'fetched_at',
@@ -45,6 +47,7 @@ class ReceivedEmail extends Model
             'uid' => 'integer',
             'size' => 'integer',
             'seen' => 'boolean',
+            'is_junk' => 'boolean',
             'opened_at' => 'datetime',
             'received_at' => 'datetime',
             'fetched_at' => 'datetime',

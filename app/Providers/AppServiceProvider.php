@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\ReceivedEmail;
 use App\Models\User;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
@@ -24,7 +25,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         View::composer('layouts.app', function ($view): void {
-            $user = auth()->user();
+            $user = Auth::user();
             $unopenedNotificationCount = 0;
 
             if ($user instanceof User && $user->canAccess(User::PERMISSION_VIEW_INBOX)) {

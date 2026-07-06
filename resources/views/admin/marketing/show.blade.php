@@ -45,7 +45,7 @@
         class="panel campaign-progress-panel"
         data-campaign-progress
         data-status-url="{{ route('marketing.campaigns.status', $campaign) }}"
-        data-running="{{ $campaign->status === \App\Models\MarketingCampaign::STATUS_SENDING ? 'true' : 'false' }}"
+        data-running="{{ in_array($campaign->status, [\App\Models\MarketingCampaign::STATUS_SENDING, \App\Models\MarketingCampaign::STATUS_DRAFT], true) ? 'true' : 'false' }}"
     >
         <div class="campaign-progress-spinner {{ $progressState }}" data-progress-spinner>
             <strong data-progress-percent>{{ $progressPercent }}%</strong>
