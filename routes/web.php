@@ -86,8 +86,12 @@ Route::middleware(['auth', 'active.user'])->group(function (): void {
 
     Route::middleware('ability:manage_marketing')->group(function (): void {
         Route::get('/marketing', [MarketingController::class, 'index'])->name('marketing.index');
+        Route::post('/marketing/audiences', [MarketingController::class, 'storeAudience'])->name('marketing.audiences.store');
+        Route::delete('/marketing/audiences/{marketingAudience}', [MarketingController::class, 'destroyAudience'])->name('marketing.audiences.destroy');
         Route::post('/marketing/contacts', [MarketingController::class, 'storeContact'])->name('marketing.contacts.store');
         Route::post('/marketing/contacts/import', [MarketingController::class, 'importContacts'])->name('marketing.contacts.import');
+        Route::post('/marketing/contacts/audiences/bulk', [MarketingController::class, 'bulkTransferContactAudiences'])->name('marketing.contacts.audiences.bulk');
+        Route::post('/marketing/contacts/{marketingContact}/audiences', [MarketingController::class, 'attachContactAudiences'])->name('marketing.contacts.audiences.attach');
         Route::post('/marketing/contacts/{marketingContact}/send-email', [MarketingController::class, 'sendContactEmail'])->name('marketing.contacts.send-email');
         Route::delete('/marketing/contacts/bulk', [MarketingController::class, 'bulkDestroyContacts'])->name('marketing.contacts.bulk-destroy');
         Route::patch('/marketing/contacts/{marketingContact}/subscribe', [MarketingController::class, 'subscribeContact'])->name('marketing.contacts.subscribe');

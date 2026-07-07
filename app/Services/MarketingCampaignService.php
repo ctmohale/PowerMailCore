@@ -19,12 +19,9 @@ class MarketingCampaignService
 
     public function send(MarketingCampaign $campaign): MarketingCampaign
     {
-        $campaign->loadMissing(['emailAccount', 'emailTemplate']);
+        $campaign->loadMissing(['emailAccount', 'emailTemplate', 'audiences']);
 
-        $contacts = MarketingContact::query()
-            ->where('client_id', $campaign->client_id)
-            ->where('status', MarketingContact::STATUS_SUBSCRIBED)
-            ->when($campaign->recipient_tag, fn ($query) => $query->whereJsonContains('tags', $campaign->recipient_tag))
+        $contacts = $this->contactsForCampaign($campaign)
             ->orderBy('email')
             ->get();
 
@@ -89,7 +86,7 @@ class MarketingCampaignService
     public function sendQueuedRecipient(int $recipientId): void
     {
         $recipient = MarketingCampaignRecipient::query()
-            ->with(['campaign.emailAccount', 'campaign.emailTemplate', 'contact'])
+            ->with(['campaign.emailAccount', 'campaign.emailTemplate', 'campaign.audiences', 'contact'])
             ->find($recipientId);
 
         if (! $recipient || $recipient->status !== MarketingCampaignRecipient::STATUS_PENDING) {
@@ -101,6 +98,16 @@ class MarketingCampaignService
 
         if (! $campaign || ! $contact || $campaign->status !== MarketingCampaign::STATUS_SENDING) {
             $this->markQueuedRecipientFailed($recipient, 'Campaign or contact is no longer available.');
+            if ($campaign) {
+                $this->finalizeQueuedCampaignIfComplete($campaign->id);
+            }
+
+            return;
+        }
+
+        if (! $this->contactBelongsToCampaignAudience($campaign, $contact)) {
+            $this->markQueuedRecipientFailed($recipient, 'Contact is not linked to this campaign audience.');
+            $this->finalizeQueuedCampaignIfComplete($campaign->id);
 
             return;
         }
@@ -168,6 +175,33 @@ class MarketingCampaignService
             'marketing_contact_id' => $contact->id,
             'attachments' => $attachments,
         ]);
+    }
+
+    private function contactsForCampaign(MarketingCampaign $campaign)
+    {
+        $audienceIds = $campaign->audiences->pluck('id')->all();
+
+        return MarketingContact::query()
+            ->where('client_id', $campaign->client_id)
+            ->where('status', MarketingContact::STATUS_SUBSCRIBED)
+            ->when(
+                $audienceIds !== [],
+                fn ($query) => $query->whereHas('audiences', fn ($query) => $query->whereIn('marketing_audiences.id', $audienceIds)),
+                fn ($query) => $query->whereRaw('1 = 0'),
+            );
+    }
+
+    private function contactBelongsToCampaignAudience(MarketingCampaign $campaign, MarketingContact $contact): bool
+    {
+        $audienceIds = $campaign->audiences->pluck('id')->all();
+
+        if ($audienceIds === []) {
+            return false;
+        }
+
+        return $contact->audiences()
+            ->whereIn('marketing_audiences.id', $audienceIds)
+            ->exists();
     }
 
     /**

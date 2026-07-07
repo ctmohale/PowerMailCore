@@ -338,6 +338,23 @@
             display: inline-flex;
             gap: 0.45rem;
             margin-left: 0.1rem;
+            min-width: 0;
+        }
+
+        .contacts-bulk-inline select,
+        .contacts-toolbar select {
+            min-height: 1.85rem;
+            padding: 0.18rem 0.42rem;
+        }
+
+        .contacts-bulk-inline select {
+            max-width: 150px;
+            min-width: 105px;
+        }
+
+        .contacts-toolbar > select {
+            max-width: 210px;
+            min-width: 150px;
         }
 
         .contacts-bulk-inline .runs-bulk-select {
@@ -352,12 +369,17 @@
         }
 
         .contacts-toolbar {
+            align-items: center;
+            display: flex;
+            flex-wrap: nowrap;
             gap: 8px;
-            grid-template-columns: minmax(220px, 320px) auto auto auto;
+            overflow: hidden;
             white-space: nowrap;
         }
 
         .contacts-toolbar .marketing-live-search {
+            flex: 1 1 240px;
+            min-width: 180px;
             min-height: 36px;
             padding: 0 8px 0 12px;
         }
@@ -367,6 +389,7 @@
         }
 
         .contacts-toolbar .marketing-live-controls {
+            flex: 0 0 auto;
             flex-wrap: nowrap;
             gap: 2px;
             padding: 2px;
@@ -386,7 +409,19 @@
         }
 
         .contacts-toolbar .contacts-bulk-inline {
+            flex: 0 1 auto;
             margin-left: 0;
+            overflow: hidden;
+        }
+
+        .contacts-toolbar .contacts-bulk-inline button {
+            min-width: max-content;
+        }
+
+        .contacts-toolbar select {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .contacts-check-col {
@@ -410,11 +445,12 @@
     @php
         $selectedStatus = request('status');
         $selectedLeadStatus = request('status');
+        $selectedAudienceId = request('audience_id');
         $selectedClientId = old('client_id', request('client_id'));
         $leadFilterActive = request()->filled('q') || request()->filled('status');
         $sendableAccountCount = $accounts->filter(fn ($account) => $account->hasUsableSmtpPassword())->count();
-        $filterActive = request()->filled('q') || request()->filled('status');
-        $activeMarketingTab = in_array(request('tab'), ['campaigns', 'analytics', 'lead-generation'], true) ? request('tab') : 'contacts';
+        $filterActive = request()->filled('q') || request()->filled('status') || request()->filled('audience_id');
+        $activeMarketingTab = in_array(request('tab'), ['audiences', 'campaigns', 'analytics', 'lead-generation'], true) ? request('tab') : 'contacts';
         $contactReadiness = $stats['contacts'] > 0 ? round(($stats['subscribed'] / $stats['contacts']) * 100) : 0;
         $templatePreviewData = $templates->mapWithKeys(fn ($template) => [
             $template->id => [
@@ -494,8 +530,12 @@
                 </div>
                 <nav class="marketing-section-nav">
                     <a href="{{ route('marketing.index') }}" @class(['active' => $activeMarketingTab === 'contacts'])>
-                        <span>Audience</span>
+                        <span>Contacts</span>
                         <strong>{{ number_format($stats['contacts']) }}</strong>
+                    </a>
+                    <a href="{{ route('marketing.index', ['tab' => 'audiences']) }}" @class(['active' => $activeMarketingTab === 'audiences'])>
+                        <span>Audience Lists</span>
+                        <strong>{{ number_format($stats['audiences']) }}</strong>
                     </a>
                     <a href="{{ route('marketing.index', ['tab' => 'campaigns']) }}" @class(['active' => $activeMarketingTab === 'campaigns'])>
                         <span>Campaigns</span>
@@ -631,19 +671,37 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                                 Bounced
                             </label>
                         </div>
+                        <select name="audience_id" aria-label="Filter by audience">
+                            <option value="">All audiences</option>
+                            @foreach ($audienceOptions as $audience)
+                                <option value="{{ $audience->id }}" @selected((string) $selectedAudienceId === (string) $audience->id)>
+                                    {{ $audience->name }} ({{ number_format($audience->subscribed_contacts_count ?? 0) }}){{ auth()->user()->isAdmin() ? ' | '.$audience->client?->name : '' }}
+                                </option>
+                            @endforeach
+                        </select>
                         <button class="secondary" type="button" data-open-dialog="filter-contacts-dialog">Advanced</button>
                         <div class="contacts-bulk-inline" data-skip-live-filter>
                             <label class="runs-bulk-select" for="contacts-select-all">
                                 <input type="checkbox" id="contacts-select-all">
                                 Select all
                             </label>
-                            <button type="submit" form="contacts-bulk-form" class="lead-bulk-delete runs-bulk-delete secondary tiny" id="contacts-bulk-delete-btn" disabled>Delete selected</button>
+                            <select name="audience_action" form="contacts-bulk-form" aria-label="Audience transfer mode">
+                                <option value="add">Add to</option>
+                                <option value="replace">Move to</option>
+                            </select>
+                            <select name="audience_ids[]" form="contacts-bulk-form" aria-label="Transfer selected contacts to audience">
+                                <option value="">Select audience</option>
+                                @foreach ($audienceOptions as $audience)
+                                    <option value="{{ $audience->id }}">{{ $audience->name }}{{ auth()->user()->isAdmin() ? ' | '.$audience->client?->name : '' }}</option>
+                                @endforeach
+                            </select>
+                            <button type="submit" form="contacts-bulk-form" formaction="{{ route('marketing.contacts.audiences.bulk') }}" class="secondary tiny" id="contacts-bulk-transfer-btn" disabled>Transfer selected</button>
+                            <button type="submit" form="contacts-bulk-form" formaction="{{ route('marketing.contacts.bulk-destroy') }}" name="_method" value="DELETE" class="lead-bulk-delete runs-bulk-delete secondary tiny" id="contacts-bulk-delete-btn" disabled data-confirm="Delete the selected contacts? This cannot be undone.">Delete selected</button>
                         </div>
                     </form>
 
-                    <form id="contacts-bulk-form" method="POST" action="{{ route('marketing.contacts.bulk-destroy') }}" data-confirm="Delete the selected contacts? This cannot be undone.">
+                    <form id="contacts-bulk-form" method="POST" action="{{ route('marketing.contacts.audiences.bulk') }}">
                         @csrf
-                        @method('DELETE')
                     </form>
 
                     <div data-contact-results>
@@ -658,6 +716,7 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                                     <th>Company</th>
                                     <th>Sector</th>
                                     <th>Focus</th>
+                                    <th>Audiences</th>
                                     <th>Tags</th>
                                     <th>Status</th>
                                     <th></th>
@@ -703,6 +762,13 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                                         <td>{{ $contact->company ?: '-' }}</td>
                                         <td>{{ $sector }}</td>
                                         <td class="wrap">{{ $focus }}</td>
+                                        <td>
+                                            @forelse ($contact->audiences as $audience)
+                                                <span class="badge">{{ $audience->name }}</span>
+                                            @empty
+                                                <span class="muted">-</span>
+                                            @endforelse
+                                        </td>
                                         <td>
                                             @forelse ($contact->tags ?? [] as $tag)
                                                 <span class="badge">{{ $tag }}</span>
@@ -774,6 +840,50 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                                                                 <dd>{{ $sector }}</dd>
                                                             </div>
                                                         </dl>
+                                                    </div>
+
+                                                    <div class="marketing-contact-dialog-section">
+                                                        <h3>Audience Lists</h3>
+                                                        <div class="summary-list">
+                                                            <div class="summary-item">
+                                                                <div>
+                                                                    <strong>Current lists</strong>
+                                                                    <div class="muted">
+                                                                        @forelse ($contact->audiences as $audience)
+                                                                            <span class="badge">{{ $audience->name }}</span>
+                                                                        @empty
+                                                                            No audience lists yet
+                                                                        @endforelse
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <form method="POST" action="{{ route('marketing.contacts.audiences.attach', $contact) }}" class="form-grid" style="margin-top: 12px;">
+                                                            @csrf
+                                                            <div class="field">
+                                                                <label for="contact_detail_audience_action_{{ $contact->id }}">Mode</label>
+                                                                <select id="contact_detail_audience_action_{{ $contact->id }}" name="audience_action">
+                                                                    <option value="add">Add to selected</option>
+                                                                    <option value="replace">Move to selected</option>
+                                                                </select>
+                                                            </div>
+                                                            <div class="field">
+                                                                <label for="contact_detail_audience_ids_{{ $contact->id }}">Audience</label>
+                                                                <select id="contact_detail_audience_ids_{{ $contact->id }}" name="audience_ids[]" multiple size="4">
+                                                                    @foreach (($audienceOptionsByClient[$contact->client_id] ?? collect()) as $audience)
+                                                                        <option value="{{ $audience->id }}">{{ $audience->name }} ({{ number_format($audience->subscribed_contacts_count ?? 0) }})</option>
+                                                                    @endforeach
+                                                                </select>
+                                                            </div>
+                                                            <div class="field">
+                                                                <label for="contact_detail_new_audience_name_{{ $contact->id }}">New audience</label>
+                                                                <input id="contact_detail_new_audience_name_{{ $contact->id }}" name="new_audience_name" placeholder="Special follow-up list">
+                                                            </div>
+                                                            <div class="field">
+                                                                <label>&nbsp;</label>
+                                                                <button type="submit">Update Lists</button>
+                                                            </div>
+                                                        </form>
                                                     </div>
 
                                                     <div class="marketing-contact-dialog-section">
@@ -918,7 +1028,7 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="10" class="marketing-empty">No contacts yet. Add a contact or import a contacts file to build your audience.</td>
+                                        <td colspan="11" class="marketing-empty">No contacts yet. Add a contact or import a contacts file to build your audience.</td>
                                     </tr>
                                 @endforelse
                             </tbody>
@@ -927,6 +1037,126 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                         <div class="marketing-pagination">
                             {{ $contacts->links() }}
                         </div>
+                    </div>
+                </div>
+            @elseif ($activeMarketingTab === 'audiences')
+                <div class="mail-toolbar marketing-workspace-head">
+                    <div>
+                        <h2>Audience Lists</h2>
+                        <div class="mail-meta">{{ number_format($audiences->count()) }} reusable list{{ $audiences->count() === 1 ? '' : 's' }} for campaign targeting</div>
+                    </div>
+                    <div class="inline-actions">
+                        <button type="button" data-open-dialog="create-audience-dialog">New Audience</button>
+                        <button class="secondary" type="button" data-open-dialog="import-contacts-dialog">Import Contacts</button>
+                        <a class="button secondary" href="{{ route('marketing.index') }}">Contacts</a>
+                    </div>
+                </div>
+
+                <div class="marketing-tab-body">
+                    <div class="kpi-grid marketing-metrics">
+                        <div class="metric" data-tone="blue">
+                            <div class="metric-top">
+                                <span class="metric-label">Lists</span>
+                                <span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg></span>
+                            </div>
+                            <strong class="metric-value">{{ number_format($stats['audiences']) }}</strong>
+                            <div class="metric-footer">
+                                <span class="trend up">Reusable</span>
+                                <span class="metric-hint">audiences</span>
+                            </div>
+                        </div>
+                        <div class="metric" data-tone="green">
+                            <div class="metric-top">
+                                <span class="metric-label">Subscribed in Lists</span>
+                                <span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></span>
+                            </div>
+                            <strong class="metric-value">{{ number_format($audiences->sum(fn ($audience) => (int) ($audience->subscribed_contacts_count ?? 0))) }}</strong>
+                            <div class="metric-footer">
+                                <span class="trend up">Memberships</span>
+                                <span class="metric-hint">can overlap</span>
+                            </div>
+                        </div>
+                        <div class="metric" data-tone="purple">
+                            <div class="metric-top">
+                                <span class="metric-label">Campaign Reuse</span>
+                                <span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></span>
+                            </div>
+                            <strong class="metric-value">{{ number_format($audiences->sum(fn ($audience) => (int) ($audience->campaigns_count ?? 0))) }}</strong>
+                            <div class="metric-footer">
+                                <span class="trend up">Links</span>
+                                <span class="metric-hint">to campaigns</span>
+                            </div>
+                        </div>
+                        <div class="metric" data-tone="amber">
+                            <div class="metric-top">
+                                <span class="metric-label">Unlisted Contacts</span>
+                                <span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg></span>
+                            </div>
+                            <strong class="metric-value">{{ number_format(max(0, $stats['contacts'] - ($stats['listed_contacts'] ?? 0))) }}</strong>
+                            <div class="metric-footer">
+                                <span class="trend down">Review</span>
+                                <span class="metric-hint">not listed</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table class="marketing-table">
+                            <thead>
+                                <tr>
+                                    <th>Audience</th>
+                                    @if (auth()->user()->isAdmin())
+                                        <th>Client</th>
+                                    @endif
+                                    <th>Subscribed</th>
+                                    <th>Total Contacts</th>
+                                    <th>Campaigns</th>
+                                    <th>Source</th>
+                                    <th>Updated</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @forelse ($audiences as $audience)
+                                    <tr>
+                                        <td>
+                                            <strong>{{ $audience->name }}</strong>
+                                            <div class="muted">{{ $audience->description ?: 'Reusable campaign audience' }}</div>
+                                        </td>
+                                        @if (auth()->user()->isAdmin())
+                                            <td>{{ $audience->client?->name ?: '-' }}</td>
+                                        @endif
+                                        <td>{{ number_format($audience->subscribed_contacts_count ?? 0) }}</td>
+                                        <td>{{ number_format($audience->contacts_count ?? 0) }}</td>
+                                        <td>{{ number_format($audience->campaigns_count ?? 0) }}</td>
+                                        <td>{{ $audience->source ? str($audience->source)->headline() : 'Manual' }}</td>
+                                        <td>{{ $audience->updated_at?->format('Y-m-d H:i') ?: '-' }}</td>
+                                        <td>
+                                            <div class="inline-actions">
+                                                <button class="mail-icon-action" type="button" data-open-dialog="create-campaign-dialog" data-preselect-audience="{{ $audience->id }}" title="Use in campaign" aria-label="Use {{ $audience->name }} in campaign">
+                                                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11h4l10-5v12L7 13H3z"/><path d="M7 13v5a2 2 0 0 0 2 2h1"/></svg>
+                                                </button>
+                                                @if (($audience->campaigns_count ?? 0) === 0)
+                                                    <form method="POST" action="{{ route('marketing.audiences.destroy', $audience) }}" data-confirm="Delete {{ $audience->name }}? Contacts remain in your database.">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                        <button class="mail-icon-action danger" type="submit" title="Delete audience" aria-label="Delete {{ $audience->name }}">
+                                                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v5"/><path d="M14 11v5"/></svg>
+                                                        </button>
+                                                    </form>
+                                                @else
+                                                    <span class="muted">In use</span>
+                                                @endif
+                                            </div>
+                                        </td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td colspan="{{ auth()->user()->isAdmin() ? 8 : 7 }}" class="marketing-empty">No audience lists yet. Create a list, import contacts into a list, or import a lead-generation run.</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             @elseif ($activeMarketingTab === 'lead-generation')
@@ -1532,7 +1762,7 @@ Website  Directions"
 
                                                     <form method="POST" action="{{ route('marketing.lead-generation.import', $run) }}">
                                                         @csrf
-                                                        <button class="mail-icon-action" type="submit" title="Import generated leads" aria-label="Import generated leads">
+                                                        <button class="mail-icon-action" type="submit" title="Import generated leads into an audience" aria-label="Import generated leads into an audience">
                                                             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/><path d="M19 15v4a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-4"/></svg>
                                                         </button>
                                                     </form>
@@ -1639,12 +1869,15 @@ Website  Directions"
                             </thead>
                             <tbody>
                                 @forelse ($campaigns as $campaign)
+                                    @php
+                                        $campaignAudienceNames = $campaign->audiences->pluck('name')->filter()->values();
+                                    @endphp
                                     <tr>
                                         <td>
                                             <strong>{{ $campaign->name }}</strong>
                                             <div class="muted">{{ $campaign->subject }}</div>
                                         </td>
-                                        <td>{{ $campaign->recipient_tag ?: 'All subscribed' }}</td>
+                                        <td>{{ $campaignAudienceNames->isNotEmpty() ? $campaignAudienceNames->implode(', ') : ($campaign->recipient_tag ?: 'No audience') }}</td>
                                         <td>
                                             <span class="badge {{ $campaign->status }}">{{ ucfirst($campaign->status) }}</span>
                                             @if ($campaign->status === \App\Models\MarketingCampaign::STATUS_SENDING)
@@ -1835,6 +2068,42 @@ Website  Directions"
         </section>
     </div>
 
+    <dialog class="edit-dialog" id="create-audience-dialog" data-auto-open="{{ request()->input('_dialog') === 'create-audience-dialog' ? 'true' : 'false' }}">
+        <form method="POST" action="{{ route('marketing.audiences.store') }}">
+            @csrf
+            <input type="hidden" name="_dialog" value="create-audience-dialog">
+            <div class="edit-dialog-body">
+                <h2>New Audience</h2>
+                <p>Create a reusable lead list for campaign targeting.</p>
+                <div class="form-grid" style="margin-top: 18px;">
+                    @if (auth()->user()->isAdmin())
+                        <div class="field">
+                            <label for="audience_client_id">Client</label>
+                            <select id="audience_client_id" name="client_id" required>
+                                <option value="">Select client</option>
+                                @foreach ($clients as $client)
+                                    <option value="{{ $client->id }}" @selected((string) $selectedClientId === (string) $client->id)>{{ $client->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    @endif
+                    <div class="field">
+                        <label for="audience_name">Name</label>
+                        <input id="audience_name" name="name" value="{{ old('name') }}" placeholder="July prospects" required>
+                    </div>
+                    <div class="field wide">
+                        <label for="audience_description">Description</label>
+                        <textarea id="audience_description" name="description" rows="3" placeholder="Who belongs in this list?">{{ old('description') }}</textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="edit-dialog-actions">
+                <button class="secondary" type="button" data-close-dialog>Cancel</button>
+                <button type="submit">Create Audience</button>
+            </div>
+        </form>
+    </dialog>
+
     <dialog class="edit-dialog" id="import-contacts-dialog" data-auto-open="{{ request()->input('_dialog') === 'import-contacts-dialog' ? 'true' : 'false' }}">
         <form method="POST" action="{{ route('marketing.contacts.import') }}" enctype="multipart/form-data">
             @csrf
@@ -1857,6 +2126,20 @@ Website  Directions"
                     <div class="field">
                         <label for="contacts_file">File</label>
                         <input id="contacts_file" name="contacts_file" type="file" accept=".csv,.txt,.tsv,.xlsx,text/csv,text/plain,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+                    </div>
+                    <div class="field">
+                        <label for="import_audience_ids">Audiences</label>
+                        <select id="import_audience_ids" name="audience_ids[]" multiple size="4">
+                            @foreach ($audienceOptions as $audience)
+                                <option value="{{ $audience->id }}" @selected(in_array((string) $audience->id, (array) old('audience_ids', []), true))>
+                                    {{ $audience->name }} ({{ number_format($audience->subscribed_contacts_count ?? 0) }}){{ auth()->user()->isAdmin() ? ' | '.$audience->client?->name : '' }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="import_new_audience_name">New audience</label>
+                        <input id="import_new_audience_name" name="new_audience_name" value="{{ old('new_audience_name') }}" placeholder="July prospects">
                     </div>
                 </div>
             </div>
@@ -1901,6 +2184,20 @@ Website  Directions"
                     <div class="field">
                         <label for="contact_tags">Tags</label>
                         <input id="contact_tags" name="tags" value="{{ old('tags') }}" placeholder="customers, leads">
+                    </div>
+                    <div class="field">
+                        <label for="contact_audience_ids">Audiences</label>
+                        <select id="contact_audience_ids" name="audience_ids[]" multiple size="4">
+                            @foreach ($audienceOptions as $audience)
+                                <option value="{{ $audience->id }}" @selected(in_array((string) $audience->id, (array) old('audience_ids', []), true))>
+                                    {{ $audience->name }} ({{ number_format($audience->subscribed_contacts_count ?? 0) }}){{ auth()->user()->isAdmin() ? ' | '.$audience->client?->name : '' }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="contact_new_audience_name">New audience</label>
+                        <input id="contact_new_audience_name" name="new_audience_name" value="{{ old('new_audience_name') }}" placeholder="New lead list">
                     </div>
                 </div>
             </div>
@@ -1960,13 +2257,17 @@ Website  Directions"
                         </select>
                     </div>
                     <div class="gmail-compose-row">
-                        <label for="campaign_recipient_tag">Audience</label>
-                        <select id="campaign_recipient_tag" name="recipient_tag">
-                            <option value="">All subscribed</option>
-                            @foreach ($tags as $tag)
-                                <option value="{{ $tag }}" @selected(old('recipient_tag') === $tag)>{{ $tag }}</option>
+                        <label for="campaign_audience_ids">Audiences</label>
+                        <select id="campaign_audience_ids" name="audience_ids[]" multiple size="4" required>
+                            @foreach ($audienceOptions as $audience)
+                                <option value="{{ $audience->id }}" @selected(in_array((string) $audience->id, (array) old('audience_ids', []), true))>
+                                    {{ $audience->name }} ({{ number_format($audience->subscribed_contacts_count ?? 0) }}){{ auth()->user()->isAdmin() ? ' | '.$audience->client?->name : '' }}
+                                </option>
                             @endforeach
                         </select>
+                        @if ($audiences->isEmpty())
+                            <a class="button secondary tiny" href="{{ route('marketing.index', ['tab' => 'audiences', '_dialog' => 'create-audience-dialog']) }}">Create Audience</a>
+                        @endif
                     </div>
                 </div>
 
@@ -2017,6 +2318,17 @@ Website  Directions"
                             <option value="{{ \App\Models\MarketingContact::STATUS_BOUNCED }}" @selected($selectedStatus === \App\Models\MarketingContact::STATUS_BOUNCED)>Bounced</option>
                         </select>
                     </div>
+                    <div class="field">
+                        <label for="audience_id">Audience</label>
+                        <select id="audience_id" name="audience_id">
+                            <option value="">All audiences</option>
+                            @foreach ($audienceOptions as $audience)
+                                <option value="{{ $audience->id }}" @selected((string) $selectedAudienceId === (string) $audience->id)>
+                                    {{ $audience->name }} ({{ number_format($audience->subscribed_contacts_count ?? 0) }}){{ auth()->user()->isAdmin() ? ' | '.$audience->client?->name : '' }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
                 </div>
             </div>
             <div class="edit-dialog-actions">
@@ -2033,6 +2345,7 @@ Website  Directions"
         (() => {
             const templateSelect = document.getElementById('campaign_email_template_id');
             const body = document.getElementById('campaign_body');
+            const campaignAudienceSelect = document.getElementById('campaign_audience_ids');
 
             const syncRequired = () => {
                 body.required = !templateSelect.value;
@@ -2040,6 +2353,20 @@ Website  Directions"
 
             templateSelect?.addEventListener('change', syncRequired);
             syncRequired();
+
+            document.querySelectorAll('[data-preselect-audience]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const audienceId = button.dataset.preselectAudience;
+
+                    if (!campaignAudienceSelect || !audienceId) {
+                        return;
+                    }
+
+                    Array.from(campaignAudienceSelect.options).forEach((option) => {
+                        option.selected = option.value === audienceId;
+                    });
+                });
+            });
 
             const results = document.querySelector('[data-contact-results]');
             const liveForms = Array.from(document.querySelectorAll('[data-live-contact-filter]'));
@@ -2093,6 +2420,7 @@ Website  Directions"
                 liveForms.forEach((form) => {
                     const q = form.querySelector('[name="q"]');
                     const status = params.get('status') || '';
+                    const audienceId = params.get('audience_id') || '';
 
                     if (q) {
                         q.value = params.get('q') || '';
@@ -2105,6 +2433,11 @@ Website  Directions"
                     const statusSelect = form.querySelector('select[name="status"]');
                     if (statusSelect) {
                         statusSelect.value = status;
+                    }
+
+                    const audienceSelect = form.querySelector('select[name="audience_id"]');
+                    if (audienceSelect) {
+                        audienceSelect.value = audienceId;
                     }
 
                     setStatusLabels(form);
@@ -2162,6 +2495,7 @@ Website  Directions"
 
                     const contactsSelectAll = document.getElementById('contacts-select-all');
                     const contactsDeleteBtn = document.getElementById('contacts-bulk-delete-btn');
+                    const contactsTransferBtn = document.getElementById('contacts-bulk-transfer-btn');
                     if (contactsSelectAll) {
                         contactsSelectAll.checked = false;
                         contactsSelectAll.indeterminate = false;
@@ -2169,6 +2503,10 @@ Website  Directions"
                     if (contactsDeleteBtn) {
                         contactsDeleteBtn.disabled = true;
                         contactsDeleteBtn.textContent = 'Delete selected';
+                    }
+                    if (contactsTransferBtn) {
+                        contactsTransferBtn.disabled = true;
+                        contactsTransferBtn.textContent = 'Transfer selected';
                     }
 
                     if (nextMeta && currentMeta) {
@@ -2375,6 +2713,7 @@ Website  Directions"
 
                 form.querySelector('[name="q"]').value = '';
                 form.querySelector('[name="status"][value=""]').checked = true;
+                form.querySelector('select[name="audience_id"]')?.value = '';
                 setStatusLabels(form);
                 loadContactResults(liveFilterUrl(form));
             });
@@ -2600,10 +2939,12 @@ Website  Directions"
         // Bulk select/delete for lead generation runs table
         (() => {
             const contactsSelectAll = document.getElementById('contacts-select-all');
+            const contactsBulkForm = document.getElementById('contacts-bulk-form');
             const contactsDeleteBtn = document.getElementById('contacts-bulk-delete-btn');
+            const contactsTransferBtn = document.getElementById('contacts-bulk-transfer-btn');
 
             const syncContactsBulk = () => {
-                if (!contactsSelectAll || !contactsDeleteBtn) {
+                if (!contactsSelectAll || !contactsDeleteBtn || !contactsTransferBtn) {
                     return;
                 }
 
@@ -2612,6 +2953,8 @@ Website  Directions"
 
                 contactsDeleteBtn.disabled = checked.length === 0;
                 contactsDeleteBtn.textContent = checked.length > 0 ? `Delete selected (${checked.length})` : 'Delete selected';
+                contactsTransferBtn.disabled = checked.length === 0;
+                contactsTransferBtn.textContent = checked.length > 0 ? `Transfer selected (${checked.length})` : 'Transfer selected';
 
                 contactsSelectAll.checked = checks.length > 0 && checked.length === checks.length;
                 contactsSelectAll.indeterminate = checked.length > 0 && checked.length < checks.length;
@@ -2627,6 +2970,14 @@ Website  Directions"
             document.addEventListener('change', (event) => {
                 if (event.target.matches('input.contact-row-check')) {
                     syncContactsBulk();
+                }
+            });
+
+            contactsBulkForm?.addEventListener('submit', (event) => {
+                if (event.submitter?.id === 'contacts-bulk-delete-btn') {
+                    contactsBulkForm.dataset.confirm = 'Delete the selected contacts? This cannot be undone.';
+                } else {
+                    delete contactsBulkForm.dataset.confirm;
                 }
             });
 

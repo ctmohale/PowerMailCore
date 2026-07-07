@@ -46,7 +46,7 @@ class MarketingContactImportService
     private const TAG_HEADERS = ['tag', 'tags', 'list', 'segment'];
 
     /**
-     * @return array{rows:int,created:int,updated:int,skipped:int,errors:array<int, string>}
+     * @return array{rows:int,created:int,updated:int,skipped:int,errors:array<int, string>,contact_ids:array<int, int>}
      */
     public function import(int $clientId, UploadedFile $file): array
     {
@@ -67,7 +67,7 @@ class MarketingContactImportService
 
     /**
      * @param  array<int, array<string, mixed>>  $leads
-     * @return array{rows:int,created:int,updated:int,skipped:int,errors:array<int, string>}
+     * @return array{rows:int,created:int,updated:int,skipped:int,errors:array<int, string>,contact_ids:array<int, int>}
      */
     public function importStructuredLeads(int $clientId, array $leads, string $source = 'lead_generation'): array
     {
@@ -99,7 +99,7 @@ class MarketingContactImportService
 
     /**
      * @param  iterable<int, array<int, string|null>>  $rows
-     * @return array{rows:int,created:int,updated:int,skipped:int,errors:array<int, string>}
+     * @return array{rows:int,created:int,updated:int,skipped:int,errors:array<int, string>,contact_ids:array<int, int>}
      */
     private function importRows(int $clientId, iterable $rows, string $source): array
     {
@@ -109,6 +109,7 @@ class MarketingContactImportService
             'updated' => 0,
             'skipped' => 0,
             'errors' => [],
+            'contact_ids' => [],
         ];
         $headers = null;
         $hasHeaderRow = false;
@@ -167,6 +168,7 @@ class MarketingContactImportService
                 $contact->forceFill([
                     'last_imported_at' => now(),
                 ])->save();
+                $stats['contact_ids'][] = (int) $contact->id;
                 $stats['updated']++;
 
                 continue;
@@ -178,7 +180,7 @@ class MarketingContactImportService
                 continue;
             }
 
-            MarketingContact::create(array_merge($contactData, [
+            $contact = MarketingContact::create(array_merge($contactData, [
                 'client_id' => $clientId,
                 'email' => $email,
                 'status' => MarketingContact::STATUS_SUBSCRIBED,
@@ -186,6 +188,7 @@ class MarketingContactImportService
                 'subscribed_at' => now(),
                 'last_imported_at' => now(),
             ]));
+            $stats['contact_ids'][] = (int) $contact->id;
             $stats['created']++;
         }
 
@@ -197,6 +200,8 @@ class MarketingContactImportService
                 'No valid email addresses were found. Upload a contacts file with an Email, Email Address, Contact Email, or Customer Email column.',
             );
         }
+
+        $stats['contact_ids'] = array_values(array_unique($stats['contact_ids']));
 
         return $stats;
     }

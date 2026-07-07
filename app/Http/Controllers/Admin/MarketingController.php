@@ -10,6 +10,7 @@ use App\Jobs\DispatchMarketingCampaignJob;
 use App\Models\EmailAccount;
 use App\Models\EmailLog;
 use App\Models\EmailTemplate;
+use App\Models\MarketingAudience;
 use App\Models\MarketingCampaign;
 use App\Models\MarketingContact;
 use App\Models\MarketingLeadGenerationRun;
@@ -57,7 +58,7 @@ class MarketingController extends Controller
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->input('status')));
 
         $contactsQuery = $this->scopeClient(MarketingContact::query())
-            ->with('client')
+            ->with(['client', 'audiences'])
             ->withCount('emailLogs')
             ->withMax('emailLogs', 'created_at')
             ->when($request->filled('q'), function ($query) use ($request): void {
@@ -77,10 +78,17 @@ class MarketingController extends Controller
                         ->orWhereRaw('CAST(metadata AS CHAR) LIKE ?', [$searchLike]);
                 });
             })
-            ->when($request->filled('status'), fn ($query) => $query->where('status', $request->input('status')));
+            ->when($request->filled('status'), fn ($query) => $query->where('status', $request->input('status')))
+            ->when($request->filled('audience_id'), function ($query) use ($request): void {
+                $audienceId = (int) $request->input('audience_id');
+
+                if ($audienceId > 0) {
+                    $query->whereHas('audiences', fn ($query) => $query->where('marketing_audiences.id', $audienceId));
+                }
+            });
 
         $campaigns = $this->scopeClient(MarketingCampaign::query())
-            ->with(['client', 'emailAccount', 'emailTemplate'])
+            ->with(['client', 'emailAccount', 'emailTemplate', 'audiences'])
             ->with('recipients.emailLog')
             ->latest()
             ->limit(20)
@@ -103,6 +111,19 @@ class MarketingController extends Controller
             ->where('type', EmailTemplate::TYPE_MARKETING)
             ->orderBy('name')
             ->get();
+        $audiences = $this->scopeClient(MarketingAudience::query())
+            ->with('client')
+            ->withCount([
+                'contacts',
+                'contacts as subscribed_contacts_count' => fn ($query) => $query->where('status', MarketingContact::STATUS_SUBSCRIBED),
+                'campaigns',
+            ])
+            ->orderBy('name')
+            ->get();
+        $audienceOptions = $audiences
+            ->unique(fn (MarketingAudience $audience): string => $audience->client_id.'|'.Str::lower($audience->name))
+            ->values();
+        $audienceOptionsByClient = $audienceOptions->groupBy('client_id');
         $sendableAccountCountsByClient = $accounts
             ->filter(fn (EmailAccount $account): bool => $account->hasUsableSmtpPassword())
             ->countBy(fn (EmailAccount $account): int => (int) $account->client_id);
@@ -110,6 +131,10 @@ class MarketingController extends Controller
             ->selectRaw('status, COUNT(*) as aggregate')
             ->groupBy('status')
             ->pluck('aggregate', 'status');
+        $listedContactCount = $this->scopeClient(MarketingContact::query())
+            ->whereHas('audiences')
+            ->distinct()
+            ->count('marketing_contacts.id');
 
         $leadGenerationRunsPaginator = $leadGenerationRunsQuery
             ->latest()
@@ -132,6 +157,10 @@ class MarketingController extends Controller
             'sendableAccountCountsByClient' => $sendableAccountCountsByClient,
             'templates' => $templates,
             'templatesByClient' => $templates->groupBy('client_id'),
+            'audiences' => $audiences,
+            'audiencesByClient' => $audiences->groupBy('client_id'),
+            'audienceOptions' => $audienceOptions,
+            'audienceOptionsByClient' => $audienceOptionsByClient,
             'tags' => $this->availableTags(),
             'leadIndustryOptions' => $this->leadIndustryOptions(),
             'leadCountryOptions' => $this->leadCountryOptions(),
@@ -142,9 +171,53 @@ class MarketingController extends Controller
                 'subscribed' => (int) ($contactStatusCounts[MarketingContact::STATUS_SUBSCRIBED] ?? 0),
                 'unsubscribed' => (int) ($contactStatusCounts[MarketingContact::STATUS_UNSUBSCRIBED] ?? 0),
                 'campaigns' => $this->scopeClient(MarketingCampaign::query())->count(),
+                'audiences' => $audiences->count(),
+                'listed_contacts' => $listedContactCount,
             ],
             'analytics' => $this->marketingAnalytics(),
         ]);
+    }
+
+    public function storeAudience(Request $request): RedirectResponse
+    {
+        if (! $this->isAdmin()) {
+            $request->merge(['client_id' => $this->currentClientId()]);
+        }
+
+        $validated = $request->validate([
+            'client_id' => [$this->isAdmin() ? 'required' : 'nullable', 'exists:clients,id'],
+            'name' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $clientId = $this->resolveClientId((int) ($validated['client_id'] ?? 0));
+
+        MarketingAudience::firstOrCreate([
+            'client_id' => $clientId,
+            'name' => trim($validated['name']),
+        ], [
+            'description' => filled($validated['description'] ?? null) ? trim((string) $validated['description']) : null,
+            'source' => 'manual',
+        ]);
+
+        return redirect()
+            ->route('marketing.index', ['tab' => 'audiences'])
+            ->with('success', 'Audience created.');
+    }
+
+    public function destroyAudience(MarketingAudience $marketingAudience): RedirectResponse
+    {
+        $this->abortUnlessClientAllowed($marketingAudience->client_id);
+
+        if ($marketingAudience->campaigns()->exists()) {
+            return back()->with('error', 'This audience is attached to one or more campaigns and cannot be deleted.');
+        }
+
+        $marketingAudience->delete();
+
+        return redirect()
+            ->route('marketing.index', ['tab' => 'audiences'])
+            ->with('success', 'Audience deleted.');
     }
 
     public function storeContact(Request $request): RedirectResponse
@@ -167,18 +240,137 @@ class MarketingController extends Controller
             'company' => ['nullable', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:255'],
             'tags' => ['nullable', 'string', 'max:1000'],
+            'audience_ids' => ['nullable', 'array'],
+            'audience_ids.*' => ['nullable', 'integer', 'exists:marketing_audiences,id'],
+            'new_audience_name' => ['nullable', 'string', 'max:255'],
         ]);
 
         $validated['client_id'] = $this->resolveClientId((int) ($validated['client_id'] ?? 0));
+        $audienceIds = $this->selectedAudienceIds($validated['client_id'], $validated['audience_ids'] ?? []);
+        $newAudience = $this->audienceFromName(
+            $validated['client_id'],
+            $validated['new_audience_name'] ?? null,
+            'manual',
+        );
+        if ($newAudience) {
+            $audienceIds[] = $newAudience->id;
+        }
+
         $validated['email'] = Str::lower($validated['email']);
         $validated['tags'] = $this->tagsFromString($validated['tags'] ?? null);
         $validated['status'] = MarketingContact::STATUS_SUBSCRIBED;
         $validated['source'] = 'manual';
         $validated['subscribed_at'] = now();
 
-        MarketingContact::create($validated);
+        $contact = MarketingContact::create(collect($validated)->except(['audience_ids', 'new_audience_name'])->all());
+
+        if ($audienceIds !== []) {
+            $contact->audiences()->syncWithoutDetaching($audienceIds);
+        }
 
         return back()->with('success', 'Marketing contact added.');
+    }
+
+    public function attachContactAudiences(Request $request, MarketingContact $marketingContact): RedirectResponse
+    {
+        $this->abortUnlessClientAllowed($marketingContact->client_id);
+
+        $validated = $request->validate([
+            'audience_ids' => ['nullable', 'array'],
+            'audience_ids.*' => ['nullable', 'integer', 'exists:marketing_audiences,id'],
+            'new_audience_name' => ['nullable', 'string', 'max:255'],
+            'audience_action' => ['nullable', Rule::in(['add', 'replace'])],
+        ]);
+
+        $audienceIds = $this->selectedAudienceIds($marketingContact->client_id, $validated['audience_ids'] ?? []);
+        $newAudience = $this->audienceFromName(
+            $marketingContact->client_id,
+            $validated['new_audience_name'] ?? null,
+            'manual',
+        );
+
+        if ($newAudience) {
+            $audienceIds[] = $newAudience->id;
+        }
+
+        if ($audienceIds === []) {
+            throw ValidationException::withMessages([
+                'audience_ids' => 'Choose an audience or enter a new audience name.',
+            ]);
+        }
+
+        if (($validated['audience_action'] ?? 'add') === 'replace') {
+            $marketingContact->audiences()->sync(array_unique($audienceIds));
+
+            return back()->with('success', 'Contact moved to audience.');
+        }
+
+        $marketingContact->audiences()->syncWithoutDetaching(array_unique($audienceIds));
+
+        return back()->with('success', 'Contact added to audience.');
+    }
+
+    public function bulkTransferContactAudiences(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'contact_ids' => ['required', 'array', 'min:1', 'max:500'],
+            'contact_ids.*' => ['integer', 'exists:marketing_contacts,id'],
+            'audience_ids' => ['nullable', 'array'],
+            'audience_ids.*' => ['nullable', 'integer', 'exists:marketing_audiences,id'],
+            'new_audience_name' => ['nullable', 'string', 'max:255'],
+            'audience_action' => ['required', Rule::in(['add', 'replace'])],
+        ]);
+
+        $contacts = $this->scopeClient(MarketingContact::query())
+            ->whereIn('id', collect($validated['contact_ids'])->map(fn ($id): int => (int) $id)->all())
+            ->get();
+
+        if ($contacts->isEmpty()) {
+            return back()->with('error', 'Select at least one contact.');
+        }
+
+        $contactsByClient = $contacts->groupBy('client_id');
+        $updated = 0;
+
+        foreach ($contactsByClient as $clientId => $clientContacts) {
+            $clientId = (int) $clientId;
+            $audienceIds = $this->selectedAudienceIds($clientId, $validated['audience_ids'] ?? []);
+            $newAudience = $this->audienceFromName(
+                $clientId,
+                $validated['new_audience_name'] ?? null,
+                'manual',
+            );
+
+            if ($newAudience) {
+                $audienceIds[] = $newAudience->id;
+            }
+
+            $audienceIds = array_values(array_unique($audienceIds));
+
+            if ($audienceIds === []) {
+                continue;
+            }
+
+            foreach ($clientContacts as $contact) {
+                if ($validated['audience_action'] === 'replace') {
+                    $contact->audiences()->sync($audienceIds);
+                } else {
+                    $contact->audiences()->syncWithoutDetaching($audienceIds);
+                }
+
+                $updated++;
+            }
+        }
+
+        if ($updated === 0) {
+            throw ValidationException::withMessages([
+                'audience_ids' => 'Choose an audience that belongs to the selected contacts client, or enter a new audience name.',
+            ]);
+        }
+
+        $verb = $validated['audience_action'] === 'replace' ? 'moved' : 'added';
+
+        return back()->with('success', $updated.' contact'.($updated === 1 ? '' : 's').' '.$verb.' to audience.');
     }
 
     public function importContacts(Request $request, MarketingContactImportService $importer): RedirectResponse
@@ -190,11 +382,33 @@ class MarketingController extends Controller
         $validated = $request->validate([
             'client_id' => [$this->isAdmin() ? 'required' : 'nullable', 'exists:clients,id'],
             'contacts_file' => ['required', 'file', 'mimes:csv,txt,tsv,xlsx', 'max:10240'],
+            'audience_ids' => ['nullable', 'array'],
+            'audience_ids.*' => ['nullable', 'integer', 'exists:marketing_audiences,id'],
+            'new_audience_name' => ['nullable', 'string', 'max:255'],
         ]);
 
         $clientId = $this->resolveClientId((int) ($validated['client_id'] ?? 0));
         $result = $importer->import($clientId, $validated['contacts_file']);
+        $audienceIds = $this->selectedAudienceIds($clientId, $validated['audience_ids'] ?? []);
+        $newAudienceName = $validated['new_audience_name'] ?? null;
+
+        if ($audienceIds === [] && blank($newAudienceName) && $result['contact_ids'] !== []) {
+            $newAudienceName = 'Import: '.pathinfo($validated['contacts_file']->getClientOriginalName(), PATHINFO_FILENAME).' '.now()->format('Y-m-d H:i');
+        }
+
+        $newAudience = $this->audienceFromName($clientId, $newAudienceName, 'import');
+
+        if ($newAudience) {
+            $audienceIds[] = $newAudience->id;
+        }
+
+        $this->attachContactsToAudiences($result['contact_ids'], $audienceIds);
+
         $message = "Import complete: {$result['created']} added, {$result['updated']} updated, {$result['skipped']} skipped.";
+
+        if ($audienceIds !== [] && $result['contact_ids'] !== []) {
+            $message .= ' Attached to '.count(array_unique($audienceIds)).' audience'.(count(array_unique($audienceIds)) === 1 ? '' : 's').'.';
+        }
 
         if ($result['created'] === 0 && $result['updated'] === 0 && $result['errors'] !== []) {
             return back()
@@ -325,12 +539,25 @@ class MarketingController extends Controller
             $marketingLeadGenerationRun->leads ?? [],
             'lead_generation',
         );
+        $audience = $this->audienceFromName(
+            $marketingLeadGenerationRun->client_id,
+            $this->leadRunAudienceName($marketingLeadGenerationRun),
+            'lead_generation',
+            'Imported from lead generation run #'.$marketingLeadGenerationRun->id.'.',
+        );
+
+        if ($audience) {
+            $this->attachContactsToAudiences($result['contact_ids'], [$audience->id]);
+        }
 
         $marketingLeadGenerationRun->forceFill([
             'imported_count' => (int) $marketingLeadGenerationRun->imported_count + (int) $result['created'] + (int) $result['updated'],
         ])->save();
 
         $message = "Import complete: {$result['created']} added, {$result['updated']} updated, {$result['skipped']} skipped.";
+        if ($audience && $result['contact_ids'] !== []) {
+            $message .= " Attached to audience {$audience->name}.";
+        }
 
         return redirect()
             ->route('marketing.index', ['tab' => 'lead-generation'])
@@ -882,11 +1109,21 @@ PROMPT;
             'subject' => ['required', 'string', 'max:255'],
             'body' => ['nullable', 'string', 'max:50000'],
             'recipient_tag' => ['nullable', 'string', 'max:255'],
+            'audience_ids' => ['required', 'array', 'min:1'],
+            'audience_ids.*' => ['nullable', 'integer', 'exists:marketing_audiences,id'],
             'template_data_json' => ['nullable', 'string'],
             'send_now' => ['nullable', 'boolean'],
         ] + $this->attachmentValidationRules());
 
         $clientId = $this->resolveClientId((int) ($validated['client_id'] ?? 0));
+        $audienceIds = $this->selectedAudienceIds($clientId, $validated['audience_ids'] ?? []);
+
+        if ($audienceIds === []) {
+            throw ValidationException::withMessages([
+                'audience_ids' => 'Choose at least one audience for this campaign.',
+            ]);
+        }
+
         $account = $this->scopeEmailAccounts(EmailAccount::query())
             ->where('client_id', $clientId)
             ->where('is_active', true)
@@ -911,11 +1148,11 @@ PROMPT;
             ]);
         }
 
-        $recipientCount = $this->recipientCount($clientId, $validated['recipient_tag'] ?? null);
+        $recipientCount = $this->recipientCount($clientId, $audienceIds);
 
         if ($recipientCount === 0) {
             throw ValidationException::withMessages([
-                'recipient_tag' => 'No subscribed marketing contacts match this audience.',
+                'audience_ids' => 'No subscribed marketing contacts match the selected campaign audience.',
             ]);
         }
 
@@ -934,6 +1171,7 @@ PROMPT;
             'status' => MarketingCampaign::STATUS_DRAFT,
             'total_recipients' => $recipientCount,
         ]);
+        $campaign->audiences()->sync($audienceIds);
 
         if ($request->boolean('send_now')) {
             // Run the dispatch job synchronously so the campaign transitions to STATUS_SENDING
@@ -956,7 +1194,7 @@ PROMPT;
         $this->abortUnlessClientAllowed($marketingCampaign->client_id);
 
         return view('admin.marketing.show', [
-            'campaign' => $marketingCampaign->load(['client', 'emailAccount', 'emailTemplate', 'recipients.contact', 'recipients.emailLog']),
+            'campaign' => $marketingCampaign->load(['client', 'emailAccount', 'emailTemplate', 'audiences', 'recipients.contact', 'recipients.emailLog']),
         ]);
     }
 
@@ -975,7 +1213,9 @@ PROMPT;
             ]);
         }
 
-        if ($this->recipientCount($marketingCampaign->client_id, $marketingCampaign->recipient_tag) === 0) {
+        $audienceIds = $marketingCampaign->audiences()->pluck('marketing_audiences.id')->all();
+
+        if ($audienceIds === [] || $this->recipientCount($marketingCampaign->client_id, $audienceIds) === 0) {
             throw ValidationException::withMessages([
                 'campaign' => 'No subscribed marketing contacts match this campaign audience.',
             ]);
@@ -1121,13 +1361,105 @@ PROMPT;
             ->all();
     }
 
-    private function recipientCount(int $clientId, ?string $tag): int
+    /**
+     * @param  array<int, int|string>  $audienceIds
+     */
+    private function recipientCount(int $clientId, array $audienceIds): int
     {
+        $audienceIds = $this->selectedAudienceIds($clientId, $audienceIds);
+
+        if ($audienceIds === []) {
+            return 0;
+        }
+
         return MarketingContact::query()
             ->where('client_id', $clientId)
             ->where('status', MarketingContact::STATUS_SUBSCRIBED)
-            ->when(filled($tag), fn ($query) => $query->whereJsonContains('tags', trim((string) $tag)))
-            ->count();
+            ->whereHas('audiences', fn ($query) => $query->whereIn('marketing_audiences.id', $audienceIds))
+            ->distinct()
+            ->count('marketing_contacts.id');
+    }
+
+    /**
+     * @param  array<int, int|string>|mixed  $audienceIds
+     * @return array<int, int>
+     */
+    private function selectedAudienceIds(int $clientId, mixed $audienceIds): array
+    {
+        $ids = collect((array) $audienceIds)
+            ->map(fn ($id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return [];
+        }
+
+        return MarketingAudience::query()
+            ->where('client_id', $clientId)
+            ->whereIn('id', $ids)
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->all();
+    }
+
+    private function audienceFromName(int $clientId, ?string $name, string $source, ?string $description = null): ?MarketingAudience
+    {
+        $name = trim((string) $name);
+
+        if ($name === '') {
+            return null;
+        }
+
+        return MarketingAudience::firstOrCreate([
+            'client_id' => $clientId,
+            'name' => Str::limit($name, 255, ''),
+        ], [
+            'description' => $description,
+            'source' => $source,
+        ]);
+    }
+
+    /**
+     * @param  array<int, int|string>  $contactIds
+     * @param  array<int, int|string>  $audienceIds
+     */
+    private function attachContactsToAudiences(array $contactIds, array $audienceIds): void
+    {
+        $contactIds = collect($contactIds)
+            ->map(fn ($id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+        $audienceIds = collect($audienceIds)
+            ->map(fn ($id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($contactIds === [] || $audienceIds === []) {
+            return;
+        }
+
+        MarketingAudience::query()
+            ->whereIn('id', $audienceIds)
+            ->get()
+            ->each(fn (MarketingAudience $audience) => $audience->contacts()->syncWithoutDetaching($contactIds));
+    }
+
+    private function leadRunAudienceName(MarketingLeadGenerationRun $run): string
+    {
+        $parts = collect([
+            'Lead Run #'.$run->id,
+            $run->industry,
+            $run->location,
+            $run->province,
+        ])->filter()->implode(' - ');
+
+        return Str::limit($parts, 255, '');
     }
 
     /**

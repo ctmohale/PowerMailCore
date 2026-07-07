@@ -25,7 +25,7 @@ class DispatchMarketingCampaignJob implements ShouldQueue
     public function handle(): void
     {
         $campaign = MarketingCampaign::query()
-            ->with(['emailAccount', 'emailTemplate'])
+            ->with(['emailAccount', 'emailTemplate', 'audiences'])
             ->find($this->campaignId);
 
         if (! $campaign || ! $campaign->emailAccount) {
@@ -36,10 +36,25 @@ class DispatchMarketingCampaignJob implements ShouldQueue
             return;
         }
 
+        $audienceIds = $campaign->audiences->pluck('id')->all();
+
+        if ($audienceIds === []) {
+            $campaign->forceFill([
+                'status' => MarketingCampaign::STATUS_FAILED,
+                'total_recipients' => 0,
+                'sent_count' => 0,
+                'failed_count' => 0,
+                'started_at' => now(),
+                'finished_at' => now(),
+            ])->save();
+
+            return;
+        }
+
         $contactsQuery = MarketingContact::query()
             ->where('client_id', $campaign->client_id)
             ->where('status', MarketingContact::STATUS_SUBSCRIBED)
-            ->when($campaign->recipient_tag, fn ($query) => $query->whereJsonContains('tags', $campaign->recipient_tag))
+            ->whereHas('audiences', fn ($query) => $query->whereIn('marketing_audiences.id', $audienceIds))
             ->orderBy('id');
 
         $totalRecipients = (clone $contactsQuery)->count();

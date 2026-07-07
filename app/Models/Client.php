@@ -59,6 +59,11 @@ class Client extends Model
         return $this->hasMany(MarketingContact::class);
     }
 
+    public function marketingAudiences(): HasMany
+    {
+        return $this->hasMany(MarketingAudience::class);
+    }
+
     public function marketingCampaigns(): HasMany
     {
         return $this->hasMany(MarketingCampaign::class);

@@ -22,6 +22,8 @@
             \App\Models\MarketingCampaign::STATUS_FAILED, \App\Models\MarketingCampaign::STATUS_PARTIAL => 'failed',
             default => '',
         };
+        $audienceNames = $campaign->audiences->pluck('name')->filter()->values();
+        $audienceLabel = $audienceNames->isNotEmpty() ? $audienceNames->implode(', ') : ($campaign->recipient_tag ?: 'No audience');
     @endphp
 
     <div class="page-header mail-page-header">
@@ -85,7 +87,7 @@
                 <span class="metric-label">Audience</span>
                 <span class="metric-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg></span>
             </div>
-            <strong class="metric-value">{{ $campaign->recipient_tag ?: 'All' }}</strong>
+            <strong class="metric-value">{{ $audienceLabel }}</strong>
             <div class="metric-footer">
                 <span class="trend up">Segment</span>
                 <span class="metric-hint">selected</span>
@@ -153,7 +155,7 @@
                         <strong>Total recipients</strong>
                         <div class="muted">{{ number_format($campaign->total_recipients) }} contact{{ $campaign->total_recipients === 1 ? '' : 's' }}</div>
                     </div>
-                    <strong>{{ $campaign->recipient_tag ?: 'All' }}</strong>
+                    <strong>{{ $audienceLabel }}</strong>
                 </div>
             </div>
         </div>
