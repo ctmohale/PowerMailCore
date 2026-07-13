@@ -5281,33 +5281,35 @@
             const nl2br = (value) => escapeHtml(value).replace(/\r\n|\r|\n/g, '<br>');
             const placeholderPattern = new RegExp('\\{\\{\\s*([A-Za-z0-9_.-]+)\\s*\\}\\}', 'g');
             const previewCss = `
-                <style>
-                    html, body {
-                        box-sizing: border-box !important;
-                        margin: 0 !important;
-                        max-width: 100% !important;
-                        overflow-x: hidden !important;
-                    }
-                    *, *::before, *::after {
-                        box-sizing: border-box !important;
-                    }
-                    body {
-                        overflow-wrap: anywhere !important;
-                        word-break: normal !important;
-                    }
-                    table {
-                        max-width: 100% !important;
-                        table-layout: fixed !important;
-                    }
-                    img, video, canvas, iframe {
-                        height: auto !important;
-                        max-width: 100% !important;
-                    }
-                    pre, code {
-                        white-space: pre-wrap !important;
-                    }
-                </style>
+                html, body {
+                    box-sizing: border-box !important;
+                    margin: 0 !important;
+                    max-width: 100% !important;
+                    overflow-x: hidden !important;
+                }
+                *, *::before, *::after {
+                    box-sizing: border-box !important;
+                }
+                body {
+                    overflow-wrap: anywhere !important;
+                    word-break: normal !important;
+                }
+                table {
+                    max-width: 100% !important;
+                    table-layout: fixed !important;
+                }
+                img, video, canvas, iframe {
+                    height: auto !important;
+                    max-width: 100% !important;
+                }
+                pre, code {
+                    white-space: pre-wrap !important;
+                }
             `;
+            const openTag = (name, attrs = '') => `<${name}${attrs}>`;
+            const closeTag = (name) => `<\/${name}>`;
+            const tag = (name, attrs = '', content = '') => `${openTag(name, attrs)}${content}${closeTag(name)}`;
+            const styleBlock = () => tag('style', '', previewCss);
 
             const render = (template, values, html = false) => String(template || '').replace(placeholderPattern, (match, key) => {
                 if (!Object.hasOwn(values, key)) {
@@ -5329,14 +5331,24 @@
                 const html = String(content || '');
 
                 if (/<\/head>/i.test(html)) {
-                    return html.replace(/<\/head>/i, `${previewCss}</head>`);
+                    return html.replace(/<\/head>/i, `${styleBlock()}${closeTag('head')}`);
                 }
 
                 if (/<body\b[^>]*>/i.test(html)) {
-                    return html.replace(/<body\b([^>]*)>/i, `<body$1>${previewCss}`);
+                    return html.replace(/<body\b([^>]*)>/i, (match, attrs) => `${openTag('body', attrs)}${styleBlock()}`);
                 }
 
-                return `<!doctype html><html><head>${previewCss}</head><body>${html}</body></html>`;
+                return [
+                    '<!doctype html>',
+                    openTag('html'),
+                    openTag('head'),
+                    styleBlock(),
+                    closeTag('head'),
+                    openTag('body'),
+                    html,
+                    closeTag('body'),
+                    closeTag('html'),
+                ].join('');
             };
 
             const collectValues = (root, baseValues = {}) => {
@@ -5372,7 +5384,14 @@
                     }
 
                     if (frame) {
-                        frame.srcdoc = fitPreviewHtml(`<div style="font-family:Arial,sans-serif;line-height:1.6;padding:24px;color:#111827;">${nl2br(plainMessage) || '<span style="color:#6b7280;">Write a message to preview it here.</span>'}</div>`);
+                        const emptyPreview = tag('span', ' style="color:#6b7280;"', 'Write a message to preview it here.');
+                        const previewBody = tag(
+                            'div',
+                            ' style="font-family:Arial,sans-serif;line-height:1.6;padding:24px;color:#111827;"',
+                            nl2br(plainMessage) || emptyPreview,
+                        );
+
+                        frame.srcdoc = fitPreviewHtml(previewBody);
                     }
 
                     return;
