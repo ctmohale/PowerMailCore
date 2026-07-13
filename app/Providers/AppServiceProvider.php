@@ -30,10 +30,12 @@ class AppServiceProvider extends ServiceProvider
 
             if ($user instanceof User && $user->canAccess(User::PERMISSION_VIEW_INBOX)) {
                 $unopenedNotificationCount = Cache::remember(
-                    'layout.unopened_count.'.$user->id,
+                    'layout.unopened_count.v2.'.$user->id,
                     now()->addSeconds(15),
                     function () use ($user): int {
-                        $query = ReceivedEmail::query()->whereNull('opened_at');
+                        $query = ReceivedEmail::query()
+                            ->whereNull('opened_at')
+                            ->where('is_junk', false);
 
                         if (! $user->isAdmin()) {
                             $assignedAccountIds = $user->emailAccounts()

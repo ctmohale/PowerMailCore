@@ -28,7 +28,7 @@ class SendEmailApiTest extends TestCase
         {
             public array $sent = [];
 
-            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = []): ?string
+            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = [], ?string $listUnsubscribeUrl = null): ?string
             {
                 $this->sent[] = compact('account', 'to', 'subject', 'html', 'text');
 
@@ -83,7 +83,7 @@ class SendEmailApiTest extends TestCase
     {
         $fakeMailer = new class extends SmtpMailer
         {
-            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = []): ?string
+            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = [], ?string $listUnsubscribeUrl = null): ?string
             {
                 return 'bearer-message-id';
             }
@@ -217,7 +217,7 @@ class SendEmailApiTest extends TestCase
     {
         $fakeMailer = new class extends SmtpMailer
         {
-            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = []): ?string
+            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = [], ?string $listUnsubscribeUrl = null): ?string
             {
                 return 'fake-message-id';
             }
@@ -314,7 +314,7 @@ class SendEmailApiTest extends TestCase
         {
             public array $sent = [];
 
-            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = []): ?string
+            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = [], ?string $listUnsubscribeUrl = null): ?string
             {
                 $this->sent[] = compact('account', 'to', 'subject', 'html', 'text');
 
@@ -370,7 +370,7 @@ class SendEmailApiTest extends TestCase
         {
             public array $sent = [];
 
-            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = []): ?string
+            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = [], ?string $listUnsubscribeUrl = null): ?string
             {
                 $this->sent[] = compact('account', 'to', 'subject', 'html', 'text', 'attachments');
 
@@ -420,7 +420,7 @@ class SendEmailApiTest extends TestCase
         {
             public array $sent = [];
 
-            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = []): ?string
+            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = [], ?string $listUnsubscribeUrl = null): ?string
             {
                 $this->sent[] = compact('account', 'to', 'subject', 'html', 'text');
 
@@ -474,7 +474,7 @@ class SendEmailApiTest extends TestCase
         {
             public array $sent = [];
 
-            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = []): ?string
+            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = [], ?string $listUnsubscribeUrl = null): ?string
             {
                 $this->sent[] = compact('account', 'to', 'subject', 'html', 'text');
 
@@ -592,7 +592,7 @@ class SendEmailApiTest extends TestCase
                 $this->error = 'Connection could not be established with host "ssl://mail.beestack.co.za:465": stream_socket_client(): Peer certificate CN=`cp62.domains.co.za\' did not match expected CN=`mail.beestack.co.za\'';
             }
 
-            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = []): ?string
+            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = [], ?string $listUnsubscribeUrl = null): ?string
             {
                 throw new RuntimeException($this->error);
             }
@@ -639,7 +639,7 @@ class SendEmailApiTest extends TestCase
         {
             public function __construct(private readonly string $error) {}
 
-            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = []): ?string
+            public function send(EmailAccount $account, string $to, string $subject, string $html, ?string $text = null, array $attachments = [], ?string $listUnsubscribeUrl = null): ?string
             {
                 throw new RuntimeException($this->error);
             }

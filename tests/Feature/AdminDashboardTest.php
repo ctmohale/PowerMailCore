@@ -745,6 +745,21 @@ class AdminDashboardTest extends TestCase
             'fetched_at' => now(),
         ]);
 
+        ReceivedEmail::create([
+            'client_id' => $account->client_id,
+            'domain_id' => $account->domain_id,
+            'email_account_id' => $account->id,
+            'uid' => 64,
+            'from_email' => 'junk@example.com',
+            'to_email' => $account->email,
+            'subject' => 'Unread junk message',
+            'size' => 1024,
+            'seen' => false,
+            'is_junk' => true,
+            'received_at' => now(),
+            'fetched_at' => now(),
+        ]);
+
         $user = User::factory()->create([
             'client_id' => $account->client_id,
             'role' => User::ROLE_CLIENT_USER,
@@ -764,6 +779,7 @@ class AdminDashboardTest extends TestCase
             ->assertOk()
             ->assertSee('Unread assigned message')
             ->assertDontSee('Read assigned message')
+            ->assertDontSee('Unread junk message')
             ->assertDontSee('Unread unassigned message');
     }
 

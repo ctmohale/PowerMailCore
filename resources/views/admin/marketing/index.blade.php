@@ -435,6 +435,11 @@
             width: 15px;
         }
 
+        .marketing-tab-panel[hidden],
+        .marketing-tab-panel.is-hidden {
+            display: none !important;
+        }
+
         @media (max-width: 980px) {
             .lead-modal-filter {
                 grid-template-columns: 1fr;
@@ -529,23 +534,23 @@
                     </div>
                 </div>
                 <nav class="marketing-section-nav">
-                    <a href="{{ route('marketing.index') }}" @class(['active' => $activeMarketingTab === 'contacts'])>
+                    <a href="{{ route('marketing.index') }}" data-marketing-tab-link="contacts" @class(['active' => $activeMarketingTab === 'contacts'])>
                         <span>Contacts</span>
                         <strong>{{ number_format($stats['contacts']) }}</strong>
                     </a>
-                    <a href="{{ route('marketing.index', ['tab' => 'audiences']) }}" @class(['active' => $activeMarketingTab === 'audiences'])>
+                    <a href="{{ route('marketing.index', ['tab' => 'audiences']) }}" data-marketing-tab-link="audiences" @class(['active' => $activeMarketingTab === 'audiences'])>
                         <span>Audience Lists</span>
                         <strong>{{ number_format($stats['audiences']) }}</strong>
                     </a>
-                    <a href="{{ route('marketing.index', ['tab' => 'campaigns']) }}" @class(['active' => $activeMarketingTab === 'campaigns'])>
+                    <a href="{{ route('marketing.index', ['tab' => 'campaigns']) }}" data-marketing-tab-link="campaigns" @class(['active' => $activeMarketingTab === 'campaigns'])>
                         <span>Campaigns</span>
                         <strong>{{ number_format($stats['campaigns']) }}</strong>
                     </a>
-                    <a href="{{ route('marketing.index', ['tab' => 'lead-generation']) }}" @class(['active' => $activeMarketingTab === 'lead-generation'])>
+                    <a href="{{ route('marketing.index', ['tab' => 'lead-generation']) }}" data-marketing-tab-link="lead-generation" @class(['active' => $activeMarketingTab === 'lead-generation'])>
                         <span>Lead Generation</span>
                         <strong>{{ number_format($leadGenerationRuns->count()) }}</strong>
                     </a>
-                    <a href="{{ route('marketing.index', ['tab' => 'analytics']) }}" @class(['active' => $activeMarketingTab === 'analytics'])>
+                    <a href="{{ route('marketing.index', ['tab' => 'analytics']) }}" data-marketing-tab-link="analytics" @class(['active' => $activeMarketingTab === 'analytics'])>
                         <span>Analytics</span>
                         <strong>{{ $analytics['delivery_rate'] }}%</strong>
                     </a>
@@ -579,7 +584,12 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
         </aside>
 
         <section class="panel mail-pane marketing-workspace">
-            @if ($activeMarketingTab === 'contacts')
+            <div
+                class="marketing-tab-panel {{ $activeMarketingTab === 'contacts' ? 'is-active' : 'is-hidden' }}"
+                data-marketing-tab-panel="contacts"
+                aria-hidden="{{ $activeMarketingTab === 'contacts' ? 'false' : 'true' }}"
+                @hidden($activeMarketingTab !== 'contacts')
+            >
                 <div class="mail-toolbar marketing-workspace-head">
                     <div>
                         <h2>Audience</h2>
@@ -1039,7 +1049,14 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                         </div>
                     </div>
                 </div>
-            @elseif ($activeMarketingTab === 'audiences')
+            </div>
+
+            <div
+                class="marketing-tab-panel {{ $activeMarketingTab === 'audiences' ? 'is-active' : 'is-hidden' }}"
+                data-marketing-tab-panel="audiences"
+                aria-hidden="{{ $activeMarketingTab === 'audiences' ? 'false' : 'true' }}"
+                @hidden($activeMarketingTab !== 'audiences')
+            >
                 <div class="mail-toolbar marketing-workspace-head">
                     <div>
                         <h2>Audience Lists</h2>
@@ -1159,7 +1176,14 @@ customer@example.com,Customer Name,Customer,Surname,Company,+27110000000,"custom
                         </table>
                     </div>
                 </div>
-            @elseif ($activeMarketingTab === 'lead-generation')
+            </div>
+
+            <div
+                class="marketing-tab-panel {{ $activeMarketingTab === 'lead-generation' ? 'is-active' : 'is-hidden' }}"
+                data-marketing-tab-panel="lead-generation"
+                aria-hidden="{{ $activeMarketingTab === 'lead-generation' ? 'false' : 'true' }}"
+                @hidden($activeMarketingTab !== 'lead-generation')
+            >
                 <div class="mail-toolbar marketing-workspace-head">
                     <div>
                         <h2>Lead Generation</h2>
@@ -1797,7 +1821,14 @@ Website  Directions"
                         </div>
                     @endif
                 </div>
-            @elseif ($activeMarketingTab === 'campaigns')
+            </div>
+
+            <div
+                class="marketing-tab-panel {{ $activeMarketingTab === 'campaigns' ? 'is-active' : 'is-hidden' }}"
+                data-marketing-tab-panel="campaigns"
+                aria-hidden="{{ $activeMarketingTab === 'campaigns' ? 'false' : 'true' }}"
+                @hidden($activeMarketingTab !== 'campaigns')
+            >
                 <div class="mail-toolbar marketing-workspace-head">
                     <div>
                         <h2>Campaigns</h2>
@@ -1898,7 +1929,14 @@ Website  Directions"
                         </table>
                     </div>
                 </div>
-            @else
+            </div>
+
+            <div
+                class="marketing-tab-panel {{ $activeMarketingTab === 'analytics' ? 'is-active' : 'is-hidden' }}"
+                data-marketing-tab-panel="analytics"
+                aria-hidden="{{ $activeMarketingTab === 'analytics' ? 'false' : 'true' }}"
+                @hidden($activeMarketingTab !== 'analytics')
+            >
                 <div class="mail-toolbar marketing-workspace-head">
                     <div>
                         <h2>Analytics</h2>
@@ -2064,7 +2102,7 @@ Website  Directions"
                         </section>
                     </div>
                 </div>
-            @endif
+            </div>
         </section>
     </div>
 
@@ -2378,6 +2416,63 @@ Website  Directions"
             let leadGenerationFilterTimer = null;
             let leadModalFilterTimer = null;
             let contactFilterRequest = null;
+
+            const tabLinks = Array.from(document.querySelectorAll('[data-marketing-tab-link]'));
+            const tabPanels = Array.from(document.querySelectorAll('[data-marketing-tab-panel]'));
+            const validTabs = new Set(tabLinks.map((link) => link.dataset.marketingTabLink));
+
+            const tabFromUrl = (url = new URL(window.location.href)) => {
+                const tab = url.searchParams.get('tab') || 'contacts';
+
+                return validTabs.has(tab) ? tab : 'contacts';
+            };
+
+            const setMarketingTab = (tab, { updateUrl = true } = {}) => {
+                const nextTab = validTabs.has(tab) ? tab : 'contacts';
+
+                tabLinks.forEach((link) => {
+                    const active = link.dataset.marketingTabLink === nextTab;
+                    link.classList.toggle('active', active);
+                    link.setAttribute('aria-current', active ? 'page' : 'false');
+                });
+
+                tabPanels.forEach((panel) => {
+                    const active = panel.dataset.marketingTabPanel === nextTab;
+                    panel.hidden = ! active;
+                    panel.classList.toggle('is-active', active);
+                    panel.classList.toggle('is-hidden', ! active);
+                    panel.setAttribute('aria-hidden', active ? 'false' : 'true');
+                });
+
+                if (updateUrl) {
+                    const url = new URL(window.location.href);
+
+                    if (nextTab === 'contacts') {
+                        url.searchParams.delete('tab');
+                    } else {
+                        url.searchParams.set('tab', nextTab);
+                    }
+
+                    window.history.pushState({ marketingTab: nextTab }, '', url);
+                }
+            };
+
+            tabLinks.forEach((link) => {
+                link.addEventListener('click', (event) => {
+                    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    setMarketingTab(link.dataset.marketingTabLink);
+                });
+            });
+
+            window.addEventListener('popstate', () => {
+                setMarketingTab(tabFromUrl(), { updateUrl: false });
+            });
+
+            setMarketingTab(tabFromUrl(), { updateUrl: false });
 
             const parsePreviewValues = (value) => {
                 if (!value) {

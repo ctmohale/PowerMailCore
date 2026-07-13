@@ -27,6 +27,32 @@ class MarketingPageRenderTest extends TestCase
         $response->assertDontSee('ParseError');
     }
 
+    public function test_marketing_page_hides_inactive_tab_panels_on_first_render(): void
+    {
+        $user = User::factory()->create([
+            'role' => User::ROLE_ADMIN,
+            'status' => User::STATUS_ACTIVE,
+        ]);
+
+        $content = $this->actingAs($user)
+            ->get(route('marketing.index'))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertMatchesRegularExpression(
+            '/class="marketing-tab-panel is-active"\s+data-marketing-tab-panel="contacts"\s+aria-hidden="false"/',
+            $content,
+        );
+        $this->assertMatchesRegularExpression(
+            '/class="marketing-tab-panel is-hidden"\s+data-marketing-tab-panel="audiences"[\s\S]{0,120}hidden/',
+            $content,
+        );
+        $this->assertMatchesRegularExpression(
+            '/class="marketing-tab-panel is-hidden"\s+data-marketing-tab-panel="lead-generation"[\s\S]{0,120}hidden/',
+            $content,
+        );
+    }
+
     public function test_marketing_page_paginates_lead_generation_runs(): void
     {
         $client = Client::create([

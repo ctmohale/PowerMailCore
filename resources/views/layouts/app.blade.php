@@ -87,6 +87,110 @@
             line-height: 1.5;
         }
 
+        .page-loader {
+            align-items: center;
+            background: rgba(248, 250, 252, 0.82);
+            backdrop-filter: blur(14px);
+            bottom: 0;
+            color: var(--text);
+            display: flex;
+            inset: 0;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            position: fixed;
+            transition: opacity 160ms ease, visibility 160ms ease;
+            visibility: hidden;
+            z-index: 9999;
+        }
+
+        body.is-page-loading .page-loader {
+            opacity: 1;
+            pointer-events: auto;
+            visibility: visible;
+        }
+
+        .page-loader-panel {
+            align-items: center;
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid rgba(79, 107, 255, 0.16);
+            border-radius: 18px;
+            box-shadow: 0 24px 70px rgba(17, 24, 39, 0.16);
+            display: grid;
+            gap: 14px;
+            justify-items: center;
+            min-width: 220px;
+            padding: 26px 30px;
+            text-align: center;
+        }
+
+        .page-loader-spinner {
+            display: grid;
+            height: 62px;
+            place-items: center;
+            position: relative;
+            width: 62px;
+        }
+
+        .page-loader-spinner::before,
+        .page-loader-spinner::after {
+            border-radius: 50%;
+            content: "";
+            inset: 0;
+            position: absolute;
+        }
+
+        .page-loader-spinner::before {
+            animation: page-loader-spin 0.82s linear infinite;
+            border: 4px solid #E0E7FF;
+            border-top-color: var(--primary);
+            border-right-color: var(--secondary);
+        }
+
+        .page-loader-spinner::after {
+            animation: page-loader-pulse 1.1s ease-in-out infinite;
+            border: 1px solid rgba(79, 107, 255, 0.26);
+            inset: 9px;
+        }
+
+        .page-loader-mark {
+            align-items: center;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 12px;
+            color: #fff;
+            display: inline-flex;
+            font-size: 18px;
+            font-weight: 950;
+            height: 34px;
+            justify-content: center;
+            width: 34px;
+        }
+
+        .page-loader-label {
+            display: grid;
+            gap: 3px;
+        }
+
+        .page-loader-label strong {
+            font-size: 14px;
+            font-weight: 950;
+        }
+
+        .page-loader-label span {
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        @keyframes page-loader-spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes page-loader-pulse {
+            0%, 100% { opacity: 0.48; transform: scale(0.88); }
+            50% { opacity: 1; transform: scale(1.08); }
+        }
+
         a { color: var(--primary); text-decoration: none; transition: color 240ms ease; }
         a:hover { color: var(--secondary); }
 
@@ -1378,8 +1482,95 @@
             width: 18px;
         }
 
+        .inbox-sidebar-loading {
+            color: var(--text-secondary);
+        }
+
+        .inbox-sidebar-loading-state {
+            align-items: center;
+            display: flex;
+            font-size: 12px;
+            font-weight: 850;
+            gap: 8px;
+            padding: 7px 10px;
+        }
+
+        .inbox-sidebar-skeleton-list,
+        .inbox-sidebar-skeleton-form {
+            display: grid;
+            gap: 7px;
+            padding: 2px 8px 0;
+        }
+
+        .inbox-sidebar-skeleton-list span,
+        .inbox-sidebar-skeleton-form span {
+            background: linear-gradient(90deg, #E2E8F0 0%, #F8FAFC 45%, #E2E8F0 100%);
+            background-size: 220% 100%;
+            border-radius: 999px;
+            display: block;
+            height: 24px;
+            animation: inbox-skeleton 1.1s ease-in-out infinite;
+        }
+
+        .inbox-sidebar-skeleton-form span {
+            border-radius: 10px;
+            height: 38px;
+        }
+
+        .inbox-sidebar-skeleton-list span:nth-child(2),
+        .inbox-sidebar-skeleton-form span:nth-child(2) {
+            width: 82%;
+        }
+
+        .inbox-sidebar-skeleton-list span:nth-child(3),
+        .inbox-sidebar-skeleton-form span:nth-child(3) {
+            width: 68%;
+        }
+
+        .inbox-sidebar-password-note {
+            padding: 0 10px 7px;
+        }
+
         @keyframes inbox-spin {
             to { transform: rotate(360deg); }
+        }
+
+        @keyframes inbox-skeleton {
+            to { background-position: -220% 0; }
+        }
+
+        .livewire-panel {
+            position: relative;
+        }
+
+        .livewire-table-frame {
+            min-height: 220px;
+            position: relative;
+        }
+
+        .livewire-loading-overlay {
+            align-items: center;
+            background: rgba(255, 255, 255, 0.74);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            box-shadow: var(--shadow-soft);
+            color: var(--text-secondary);
+            display: none;
+            font-size: 13px;
+            font-weight: 850;
+            gap: 9px;
+            left: 50%;
+            min-height: 42px;
+            padding: 10px 14px;
+            position: absolute;
+            top: 18px;
+            transform: translateX(-50%);
+            z-index: 4;
+        }
+
+        tbody.is-refreshing {
+            opacity: 0.42;
+            transition: opacity 160ms ease;
         }
 
         .inbox-check-col {
@@ -4786,6 +4977,18 @@
     </style>
 </head>
 <body>
+    <noscript><style>.page-loader { display: none !important; }</style></noscript>
+    <div class="page-loader" data-page-loader role="status" aria-live="polite" aria-label="Loading page" hidden>
+        <div class="page-loader-panel">
+            <span class="page-loader-spinner" aria-hidden="true">
+                <span class="page-loader-mark">P</span>
+            </span>
+            <span class="page-loader-label">
+                <strong data-page-loader-title>Loading...</strong>
+                <span data-page-loader-detail>Preparing your workspace</span>
+            </span>
+        </div>
+    </div>
     @auth
         @php
             $currentUser = auth()->user();
@@ -4795,7 +4998,7 @@
         <div class="app-shell">
             <aside class="sidebar">
                 <div class="sidebar-head">
-                    <a class="brand" href="{{ route('dashboard') }}">
+                    <a class="brand" href="{{ route('dashboard') }}" wire:navigate>
                         <span class="brand-mark">P</span>
                         <span class="brand-text">
                             PowerMail
@@ -4817,7 +5020,7 @@
                                 <svg class="nav-section-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
                             </button>
                             <div class="nav-section-items" id="nav-section-overview">
-                                <a href="{{ route('dashboard') }}" title="Dashboard" aria-label="Dashboard" @class(['active' => request()->routeIs('dashboard')])>
+                                <a href="{{ route('dashboard') }}" title="Dashboard" aria-label="Dashboard" wire:navigate @class(['active' => request()->routeIs('dashboard')])>
                                     <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 13h8V3H3v10Z"/><path d="M13 21h8V11h-8v10Z"/><path d="M13 3v6h8V3h-8Z"/><path d="M3 21h8v-6H3v6Z"/></svg></span>
                                     <span>Dashboard</span>
                                 </a>
@@ -4832,7 +5035,7 @@
                                 </button>
                                 <div class="nav-section-items" id="nav-section-mail">
                                     @if ($currentUser->canAccess(\App\Models\User::PERMISSION_SEND_EMAILS))
-                                        <a href="{{ route('send-email.index') }}" title="Send Email" aria-label="Send Email" @class(['active' => request()->routeIs('send-email.*')])>
+                                        <a href="{{ route('send-email.index') }}" title="Send Email" aria-label="Send Email" wire:navigate @class(['active' => request()->routeIs('send-email.*')])>
                                             <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></span>
                                             <span>Send Email</span>
                                         </a>
@@ -4844,7 +5047,7 @@
                                         </a>
                                     @endif
                                     @if ($currentUser->canAccess(\App\Models\User::PERMISSION_VIEW_LOGS))
-                                        <a href="{{ route('email-logs.index') }}" title="Logs" aria-label="Logs" @class(['active' => request()->routeIs('email-logs.*')])>
+                                        <a href="{{ route('email-logs.index') }}" title="Logs" aria-label="Logs" wire:navigate @class(['active' => request()->routeIs('email-logs.*')])>
                                             <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg></span>
                                             <span>Logs</span>
                                         </a>
@@ -4860,7 +5063,7 @@
                                     <svg class="nav-section-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
                                 </button>
                                 <div class="nav-section-items" id="nav-section-marketing">
-                                    <a href="{{ route('marketing.index') }}" title="Marketing" aria-label="Marketing" @class(['active' => request()->routeIs('marketing.*')])>
+                                    <a href="{{ route('marketing.index') }}" title="Marketing" aria-label="Marketing" wire:navigate @class(['active' => request()->routeIs('marketing.*')])>
                                         <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11h4l10-5v12L7 13H3z"/><path d="M7 13v5a2 2 0 0 0 2 2h1"/><path d="M21 9v6"/></svg></span>
                                         <span>Marketing</span>
                                     </a>
@@ -4876,27 +5079,27 @@
                                 </button>
                                 <div class="nav-section-items" id="nav-section-companies">
                                     @if ($currentUser->isAdmin())
-                                        <a href="{{ route('clients.index') }}" title="Clients" aria-label="Clients" @class(['active' => request()->routeIs('clients.*')])>
+                                        <a href="{{ route('clients.index') }}" title="Clients" aria-label="Clients" wire:navigate @class(['active' => request()->routeIs('clients.*')])>
                                             <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
                                             <span>Clients</span>
                                         </a>
-                                        <a href="{{ route('users.index') }}" title="Users" aria-label="Users" @class(['active' => request()->routeIs('users.*')])>
+                                        <a href="{{ route('users.index') }}" title="Users" aria-label="Users" wire:navigate @class(['active' => request()->routeIs('users.*')])>
                                             <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M18 8h4"/><path d="M20 6v4"/></svg></span>
                                             <span>Users</span>
                                         </a>
-                                        <a href="{{ route('domains.index') }}" title="Domains" aria-label="Domains" @class(['active' => request()->routeIs('domains.*')])>
+                                        <a href="{{ route('domains.index') }}" title="Domains" aria-label="Domains" wire:navigate @class(['active' => request()->routeIs('domains.*')])>
                                             <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 0 20"/><path d="M12 2a15.3 15.3 0 0 0 0 20"/></svg></span>
                                             <span>Domains</span>
                                         </a>
                                     @endif
                                     @if ($currentUser->canAccess(\App\Models\User::PERMISSION_MANAGE_ACCOUNTS))
-                                        <a href="{{ route('email-accounts.index') }}" title="Email Accounts" aria-label="Email Accounts" @class(['active' => request()->routeIs('email-accounts.*')])>
+                                        <a href="{{ route('email-accounts.index') }}" title="Email Accounts" aria-label="Email Accounts" wire:navigate @class(['active' => request()->routeIs('email-accounts.*')])>
                                             <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="m22 6-10 7L2 6"/></svg></span>
                                             <span>Email Accounts</span>
                                         </a>
                                     @endif
                                     @if ($currentUser->canAccess(\App\Models\User::PERMISSION_MANAGE_TEMPLATES))
-                                        <a href="{{ route('email-templates.index') }}" title="Email Templates" aria-label="Email Templates" @class(['active' => request()->routeIs('email-templates.*')])>
+                                        <a href="{{ route('email-templates.index') }}" title="Email Templates" aria-label="Email Templates" wire:navigate @class(['active' => request()->routeIs('email-templates.*')])>
                                             <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg></span>
                                             <span>Email Templates</span>
                                         </a>
@@ -4912,7 +5115,7 @@
                                     <svg class="nav-section-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
                                 </button>
                                 <div class="nav-section-items" id="nav-section-developer">
-                                    <a href="{{ route('api-keys.index') }}" title="API Keys" aria-label="API Keys" @class(['active' => request()->routeIs('api-keys.*')])>
+                                    <a href="{{ route('api-keys.index') }}" title="API Keys" aria-label="API Keys" wire:navigate @class(['active' => request()->routeIs('api-keys.*')])>
                                         <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15 2 6 6"/><path d="m18 5 3 3"/></svg></span>
                                         <span>API Keys</span>
                                     </a>
@@ -5194,10 +5397,122 @@
             const message = document.getElementById('confirm-message');
             const cancel = document.getElementById('confirm-cancel');
             const submit = document.getElementById('confirm-submit');
+            const pageLoader = document.querySelector('[data-page-loader]');
+            const pageLoaderTitle = document.querySelector('[data-page-loader-title]');
+            const pageLoaderDetail = document.querySelector('[data-page-loader-detail]');
             let pendingForm = null;
             let pendingSubmitter = null;
 
             const loadingTargets = new WeakSet();
+            let pageLoaderTimer = null;
+
+            const showPageLoader = (title = 'Loading...', detail = 'Preparing your workspace') => {
+                if (!pageLoader) {
+                    return;
+                }
+
+                window.clearTimeout(pageLoaderTimer);
+
+                if (pageLoaderTitle) {
+                    pageLoaderTitle.textContent = title;
+                }
+
+                if (pageLoaderDetail) {
+                    pageLoaderDetail.textContent = detail;
+                }
+
+                document.body.classList.add('is-page-loading');
+                pageLoader.removeAttribute('hidden');
+            };
+
+            const hidePageLoader = () => {
+                if (!pageLoader) {
+                    return;
+                }
+
+                document.body.classList.remove('is-page-loading');
+                pageLoaderTimer = window.setTimeout(() => {
+                    pageLoader.setAttribute('hidden', 'hidden');
+                }, 180);
+            };
+
+            const shouldShowPageLoaderForLink = (link, event) => {
+                if (!link || event.defaultPrevented || event.button !== 0) {
+                    return false;
+                }
+
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                    return false;
+                }
+
+                const href = link.getAttribute('href') || '';
+
+                if (
+                    href === ''
+                    || href === '#'
+                    || href.startsWith('#')
+                    || href.startsWith('mailto:')
+                    || href.startsWith('tel:')
+                    || link.target === '_blank'
+                    || link.hasAttribute('download')
+                    || link.closest('[data-no-page-loader], [data-marketing-tab-link]')
+                ) {
+                    return false;
+                }
+
+                return true;
+            };
+
+            const isSafeLivewireNavigation = (link, event) => {
+                if (!link || event.defaultPrevented || event.button !== 0) {
+                    return false;
+                }
+
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                    return false;
+                }
+
+                const href = link.getAttribute('href') || '';
+
+                if (
+                    href === ''
+                    || href === '#'
+                    || href.startsWith('#')
+                    || href.startsWith('mailto:')
+                    || href.startsWith('tel:')
+                    || link.target === '_blank'
+                    || link.hasAttribute('download')
+                    || link.closest('[data-no-livewire-navigate]')
+                ) {
+                    return false;
+                }
+
+                let url;
+
+                try {
+                    url = new URL(href, window.location.href);
+                } catch (error) {
+                    return false;
+                }
+
+                if (url.origin !== window.location.origin) {
+                    return false;
+                }
+
+                if (url.pathname === '/inbox' || url.pathname.startsWith('/inbox/')) {
+                    return false;
+                }
+
+                if (url.pathname === window.location.pathname && url.search === window.location.search && url.hash) {
+                    return false;
+                }
+
+                if (url.pathname.includes('/download')) {
+                    return false;
+                }
+
+                return typeof window.Livewire?.navigate === 'function';
+            };
 
             const setButtonLoading = (button, persist = false) => {
                 if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true') {
@@ -5252,6 +5567,7 @@
 
                 if (!confirmText || form.dataset.confirmed === 'true') {
                     setButtonLoading(submitter, true);
+                    showPageLoader('Working...', 'Sending your request');
                     return;
                 }
 
@@ -5302,10 +5618,12 @@
                 }
 
                 if (field.value === '') {
+                    showPageLoader('Loading...', 'Refreshing results');
                     window.location.href = form.action;
                     return;
                 }
 
+                showPageLoader('Loading...', 'Refreshing results');
                 form.requestSubmit();
             });
 
@@ -5314,6 +5632,7 @@
                 const closer = event.target.closest('[data-close-dialog]');
                 const composeTrigger = event.target.closest('[data-compose-to]');
                 const action = event.target.closest('button, a.button, .icon-button');
+                const navigationLink = event.target.closest('a[href]');
 
                 if (composeTrigger) {
                     const composeTo = document.getElementById('compose_to');
@@ -5355,6 +5674,18 @@
                     closer.closest('dialog')?.close();
                 }
 
+                if (isSafeLivewireNavigation(navigationLink, event)) {
+                    event.preventDefault();
+                    setButtonLoading(navigationLink, false);
+                    showPageLoader('Loading page...', 'Keeping your session warm');
+                    window.Livewire.navigate(navigationLink.href);
+                    return;
+                }
+
+                if (navigationLink && shouldShowPageLoaderForLink(navigationLink, event)) {
+                    showPageLoader('Loading page...', 'Opening the next section');
+                }
+
                 if (!action || action.classList.contains('is-loading') || action.matches('[data-nav-section-toggle]')) {
                     return;
                 }
@@ -5369,6 +5700,21 @@
                 }
 
                 setButtonLoading(action);
+            });
+
+            document.addEventListener('livewire:navigate', () => {
+                showPageLoader('Loading page...', 'Updating the interface');
+            });
+
+            document.addEventListener('livewire:navigated', () => {
+                hidePageLoader();
+            });
+
+            window.addEventListener('pageshow', hidePageLoader);
+            window.addEventListener('load', hidePageLoader);
+            pageLoaderTimer = window.setTimeout(hidePageLoader, 260);
+            window.addEventListener('beforeunload', () => {
+                showPageLoader('Loading page...', 'Opening the next section');
             });
 
             const autoOpenDialog = document.querySelector('dialog[data-auto-open="true"]');

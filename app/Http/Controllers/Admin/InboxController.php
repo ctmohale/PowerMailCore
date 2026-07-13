@@ -23,7 +23,7 @@ class InboxController extends Controller
 
     public function index(Request $request): View
     {
-        return view('admin.inbox.index', $this->inboxViewData($request));
+        return view('admin.inbox.index', $this->inboxViewData($request, includeSidebarData: false));
     }
 
     public function poll(Request $request, InboxSyncService $syncService): JsonResponse
@@ -231,6 +231,7 @@ class InboxController extends Controller
             ])->save();
 
             Cache::forget('layout.unopened_count.'.$request->user()->id);
+            Cache::forget('layout.unopened_count.v2.'.$request->user()->id);
         }
 
         $canSendEmails = $request->user()->canAccess(User::PERMISSION_SEND_EMAILS);
@@ -293,6 +294,7 @@ class InboxController extends Controller
         ])->save();
 
         Cache::forget('layout.unopened_count.'.$request->user()->id);
+        Cache::forget('layout.unopened_count.v2.'.$request->user()->id);
 
         return back()->with('success', 'Email marked as opened.');
     }
@@ -307,6 +309,7 @@ class InboxController extends Controller
         ])->save();
 
         Cache::forget('layout.unopened_count.'.$request->user()->id);
+        Cache::forget('layout.unopened_count.v2.'.$request->user()->id);
 
         return back()->with('success', 'Email marked as unopened.');
     }
@@ -339,7 +342,7 @@ class InboxController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function inboxViewData(Request $request): array
+    private function inboxViewData(Request $request, bool $includeSidebarData = true): array
     {
         $selectedMailboxType = $this->selectedMailboxType($request);
         $query = $this->messageQuery($request, $selectedMailboxType)
@@ -349,27 +352,38 @@ class InboxController extends Controller
         $unopenedCount = (clone $query)->whereNull('opened_at')->count();
 
         $accountsQuery = $this->scopeEmailAccounts(EmailAccount::query())
-            ->with('client')
-            ->withCount(['receivedEmails' => function ($query) use ($selectedMailboxType): void {
-                if ($selectedMailboxType !== 'all') {
-                    $query->where('mailbox_type', $selectedMailboxType);
-                }
-            }])
             ->where('inbox_enabled', true)
             ->orderBy('email');
 
-        $configurableAccountsQuery = $this->scopeEmailAccounts(EmailAccount::query())
-            ->with('client')
-            ->orderBy('email');
+        if ($includeSidebarData) {
+            $accountsQuery
+                ->with('client')
+                ->withCount(['receivedEmails' => function ($query) use ($request, $selectedMailboxType): void {
+                    $this->applyInboxMessageFilters($query, $request, $selectedMailboxType, includeAccountFilter: false);
+                }]);
+        }
+
+        $configurableAccountsQuery = null;
+
+        if ($includeSidebarData) {
+            $configurableAccountsQuery = $this->scopeEmailAccounts(EmailAccount::query())
+                ->with('client')
+                ->orderBy('email');
+        }
 
         if ($this->isAdmin() && $request->filled('client_id')) {
             $accountsQuery->where('client_id', $request->integer('client_id'));
-            $configurableAccountsQuery->where('client_id', $request->integer('client_id'));
+            $configurableAccountsQuery?->where('client_id', $request->integer('client_id'));
         }
 
-        $folderCountsQuery = $this->messageQuery($request, 'all')
-            ->selectRaw('mailbox_type, count(*) as aggregate')
-            ->groupBy('mailbox_type');
+        $folderCounts = collect();
+
+        if ($includeSidebarData) {
+            $folderCounts = $this->messageQuery($request, 'all')
+                ->selectRaw('mailbox_type, count(*) as aggregate')
+                ->groupBy('mailbox_type')
+                ->pluck('aggregate', 'mailbox_type');
+        }
         $canSendEmails = $request->user()->canAccess(User::PERMISSION_SEND_EMAILS);
         $composeAccounts = collect();
         $templates = collect();
@@ -400,10 +414,10 @@ class InboxController extends Controller
         $accounts = $accountsQuery->get();
 
         return [
-            'clients' => $this->clientsForUser(),
+            'clients' => $includeSidebarData ? $this->clientsForUser() : collect(),
             'accounts' => $accounts,
             'configurableAccounts' => $request->user()->canAccess(User::PERMISSION_MANAGE_ACCOUNTS)
-                ? $configurableAccountsQuery->get()
+                ? ($configurableAccountsQuery?->get() ?? collect())
                 : collect(),
             'composeAccounts' => $composeAccounts,
             'templates' => $templates,
@@ -412,7 +426,7 @@ class InboxController extends Controller
             'inboxQuery' => $this->inboxQueryParameters($request),
             'mailboxTypes' => ['all' => 'All mail'] + ImapMailboxClient::mailboxTypeOptions(),
             'selectedMailboxType' => $selectedMailboxType,
-            'folderCounts' => $folderCountsQuery->pluck('aggregate', 'mailbox_type'),
+            'folderCounts' => $folderCounts,
             'unopenedCount' => $unopenedCount,
             'junkCount' => $this->scopeEmailAccountData(ReceivedEmail::query())->where('is_junk', true)->count(),
             'selectedJunk' => $request->input('junk', ''),
@@ -437,7 +451,14 @@ class InboxController extends Controller
             $query->where('client_id', $request->integer('client_id'));
         }
 
-        if ($request->filled('email_account_id')) {
+        $this->applyInboxMessageFilters($query, $request, $selectedMailboxType);
+
+        return $query;
+    }
+
+    private function applyInboxMessageFilters($query, Request $request, string $selectedMailboxType, bool $includeAccountFilter = true): void
+    {
+        if ($includeAccountFilter && $request->filled('email_account_id')) {
             $query->where('email_account_id', $request->integer('email_account_id'));
         }
 
@@ -457,8 +478,6 @@ class InboxController extends Controller
             'all' => null,
             default => $query->where('is_junk', false),
         };
-
-        return $query;
     }
 
     /**
