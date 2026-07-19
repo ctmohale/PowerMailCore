@@ -29,7 +29,11 @@ function CloseIcon() {
   );
 }
 
-export function ProspectCallDialog({ clients, form, onClose, onSubmit, updateForm }) {
+function contactDetails(contact) {
+  return [...new Set([contact.decisionMaker, contact.email, contact.cell].filter(Boolean))].join(' | ');
+}
+
+export function ProspectCallDialog({ clients, error = '', form, onClose, onDelete, onSubmit, submitting = false, title = 'Record Call', updateForm }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(true);
@@ -82,7 +86,7 @@ export function ProspectCallDialog({ clients, form, onClose, onSubmit, updateFor
       <form className="modal-panel prospect-call-dialog" onSubmit={onSubmit} role="dialog" aria-modal="true" aria-labelledby="record-call-title">
         <div className="modal-head">
           <div>
-            <h2 id="record-call-title">Record Call</h2>
+            <h2 id="record-call-title">{title}</h2>
             <p>Choose an existing lead to prefill their contact details.</p>
           </div>
           <button className="prospect-call-close" type="button" onClick={onClose} aria-label="Close record call" title="Close">
@@ -91,6 +95,7 @@ export function ProspectCallDialog({ clients, form, onClose, onSubmit, updateFor
         </div>
 
         <div className="prospect-call-body">
+          {error && <div className="alert prospect-dialog-error">{error}</div>}
           <div className="prospect-contact-search">
             <label htmlFor="prospect-contact-query">Find a lead or contact</label>
             <div className="prospect-search-input">
@@ -115,7 +120,7 @@ export function ProspectCallDialog({ clients, form, onClose, onSubmit, updateFor
                     <span className="prospect-contact-avatar">{String(contact.company || contact.decisionMaker || contact.email || '?').charAt(0).toUpperCase()}</span>
                     <span className="prospect-contact-copy">
                       <strong>{contact.company || contact.decisionMaker || contact.email}</strong>
-                      <small>{[contact.decisionMaker, contact.email, contact.cell].filter(Boolean).join(' | ')}</small>
+                      <small>{contactDetails(contact)}</small>
                     </span>
                     <span className="prospect-select-label">Select</span>
                   </button>
@@ -182,8 +187,13 @@ export function ProspectCallDialog({ clients, form, onClose, onSubmit, updateFor
         </div>
 
         <div className="modal-actions">
-          <button className="secondary-button" type="button" onClick={onClose}>Cancel</button>
-          <button className="primary-button" type="submit">Save Call</button>
+          {onDelete && <button className="danger-button" type="button" onClick={onDelete} disabled={submitting}>Delete</button>}
+          <span className="modal-action-spacer" />
+          <button className="secondary-button" type="button" onClick={onClose} disabled={submitting}>Cancel</button>
+          <button className="primary-button" type="submit" disabled={submitting}>
+            {submitting && <span className="button-spinner" />}
+            Save Call
+          </button>
         </div>
       </form>
     </section>

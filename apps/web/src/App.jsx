@@ -9,6 +9,8 @@ import { PublicBookingPage } from './components/PublicBookingPage.jsx';
 import { PublicUnsubscribePage } from './components/PublicUnsubscribePage.jsx';
 import { ResourcePage } from './components/ResourcePage.jsx';
 import { UnreadInboxButton } from './components/UnreadInboxButton.jsx';
+import { CalendarSlotsPage } from './components/CalendarSlotsPage.jsx';
+import { ProspectCallsPage } from './components/ProspectCallsPage.jsx';
 import { AppDataProvider } from './context/AppDataContext.jsx';
 import { useAuth } from './context/AuthContext.jsx';
 import { resourceGroups } from './config/resources.js';
@@ -459,7 +461,9 @@ export default function App() {
           {page.type === 'logs' && <EmailLogsPage />}
           {page.type === 'compose' && <ComposePage />}
           {page.type === 'resource' && page.id === 'templates' && <EmailTemplatesPage />}
-          {page.type === 'resource' && page.id !== 'templates' && (
+          {page.type === 'resource' && page.id === 'booking-slots' && <CalendarSlotsPage />}
+          {page.type === 'resource' && page.id === 'prospect-calls' && <ProspectCallsPage />}
+          {page.type === 'resource' && !['templates', 'booking-slots', 'prospect-calls'].includes(page.id) && (
             <ResourcePage
               groupId={page.groupId}
               initialInboxOpened={page.inboxOpened}

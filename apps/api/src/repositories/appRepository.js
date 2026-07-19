@@ -757,6 +757,7 @@ export function listProspectCalls(query, user) {
   return listFromSql({
     selectSql: `
       SELECT prospect_calls.id, prospect_calls.client_id AS clientId, clients.name AS clientName,
+      prospect_calls.marketing_contact_id AS marketing_contact_id,
       prospect_calls.company_name AS companyName, prospect_calls.contact_name AS contactName,
       prospect_calls.email, prospect_calls.phone, prospect_calls.call_date AS callDate,
       prospect_calls.follow_up_at AS followUpAt, prospect_calls.status, prospect_calls.outcome,
