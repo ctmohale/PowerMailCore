@@ -1,0 +1,30 @@
+{
+  "name": "@powermail/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node src/server.js",
+    "smoke:admin": "node scripts/admin-smoke.mjs",
+    "smoke:api-key": "node scripts/api-key-smoke.mjs",
+    "smoke:compose": "node scripts/compose-smoke.mjs",
+    "smoke:import": "node scripts/import-smoke.mjs",
+    "smoke:import-xlsx": "node scripts/xlsx-import-smoke.mjs",
+    "smoke:inbox": "node scripts/inbox-smoke.mjs",
+    "smoke:leads": "node scripts/leads-smoke.mjs",
+    "smoke:marketing": "node scripts/marketing-smoke.mjs",
+    "smoke:send": "node scripts/send-smoke.mjs",
+    "smoke:templates": "node scripts/template-smoke.mjs",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^11.8.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "read-excel-file": "^9.3.2"
+  },
+  "devDependencies": {
+    "fflate": "^0.8.3"
+  }
+}

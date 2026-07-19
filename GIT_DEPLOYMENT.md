@@ -1,113 +1,13 @@
-# Continuous Deployment With Git
+# Git Deployment
 
-PowerMail Core supports two Git deployment styles.
+Use `.github/workflows/deploy-cpanel.yml.example` as the starting point for automated cPanel deployment.
 
-## Option A: cPanel Git Version Control
+Configure these repository secrets:
 
-This is the simplest cPanel-native option.
+- `CPANEL_HOST`
+- `CPANEL_PORT`
+- `CPANEL_USER`
+- `CPANEL_SSH_KEY`
+- `CPANEL_APP_PATH`
 
-1. Create a private GitHub repository.
-2. Push this project to the repository.
-3. In cPanel, open `Git Version Control`.
-4. Clone the repository into:
-
-```text
-/home/CPANEL_USER/powermail-core
-```
-
-5. Set your subdomain document root to:
-
-```text
-/home/CPANEL_USER/powermail-core/public
-```
-
-6. Create `.env` on the server from `.env.cpanel.example`.
-7. Fill in database, app URL, and admin values.
-8. In cPanel `Git Version Control`, click `Pull or Deploy`.
-
-cPanel will read `.cpanel.yml` and run:
-
-```bash
-bash scripts/cpanel-deploy.sh
-```
-
-That script installs dependencies when Composer is available, runs migrations, and refreshes Laravel caches.
-It also tries common cPanel PHP binaries and chooses one with the required CLI
-extensions before running Artisan.
-
-This option requires Composer on cPanel, unless you manually upload the `vendor` folder once before deploying.
-
-If the deployed site still fails, temporarily upload `scripts/deploy-check.php`
-to the domain's public web root as `deploy-check.php`, then open:
-
-```text
-https://mailcore.yourdomain.co.za/deploy-check.php
-```
-
-Delete `deploy-check.php` from the public web root after the checks pass.
-
-## Option B: GitHub Actions Auto Deploy
-
-Use this if you want deployment to happen automatically every time you push to `main`.
-
-1. Rename:
-
-```text
-.github/workflows/deploy-cpanel.yml.example
-```
-
-to:
-
-```text
-.github/workflows/deploy-cpanel.yml
-```
-
-2. In GitHub, open `Settings > Secrets and variables > Actions`.
-3. Add these repository secrets:
-
-```text
-CPANEL_HOST=server.example.com
-CPANEL_PORT=22
-CPANEL_USER=your_cpanel_username
-CPANEL_SSH_KEY=your_private_ssh_key
-CPANEL_APP_PATH=/home/your_cpanel_username/powermail-core
-```
-
-4. Push to `main`.
-
-The workflow will:
-
-- run tests
-- build production Composer dependencies
-- upload changed files with `rsync`
-- run `scripts/cpanel-deploy.sh` on the server
-
-This is the best option if your cPanel does not have Composer, because GitHub builds and uploads the `vendor` folder.
-
-## First Server Setup
-
-Before the first deploy, create the MySQL database/user in cPanel and create `.env` on the server.
-
-Use:
-
-```bash
-cp .env.cpanel.example .env
-```
-
-Then edit `.env` with real values.
-
-For the first admin seed, add this temporarily:
-
-```env
-DEPLOY_RUN_SEED=true
-```
-
-After the first deploy succeeds, remove it or set:
-
-```env
-DEPLOY_RUN_SEED=false
-```
-
-## Important
-
-Never commit `.env`, cPanel passwords, database passwords, or private SSH keys.
+The workflow verifies the React build and Node entry point before uploading. It preserves the production `.env` and SQLite database, runs `scripts/cpanel-deploy.sh`, and restarts the Node application.

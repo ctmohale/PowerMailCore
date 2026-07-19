@@ -1,147 +1,82 @@
 # PowerMail Core
 
-PowerMail Core is a Laravel email core for multiple client apps and websites. It has one admin dashboard and one REST API for sending templated emails through configured SMTP accounts.
+PowerMail Core is a React dashboard and Node.js API for multi-company email delivery, inbox syncing, templates, marketing contacts, audiences, campaigns, lead generation, prospect calls, bookings, API keys, and delivery logs.
 
-## MVP Modules
+## Requirements
 
-- Clients
-- Domains
-- SMTP email accounts
-- Inbox access for received emails
-- Email templates
-- API keys
-- Email logs
+- Node.js 20 or newer
+- npm
+- SQLite
 
 ## Local Setup
 
 ```bash
-composer install
+npm install
 cp .env.example .env
-php artisan key:generate
-php artisan migrate --seed
-php artisan serve
+npm run dev
 ```
 
-Default seeded login:
+The development services run at:
 
-```text
-Email: admin@powermailcore.test
-Password: password
-```
+- React: `http://127.0.0.1:5174`
+- Node API: `http://127.0.0.1:4000`
 
-Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` before seeding on a hosted environment.
+The existing application data is stored in `database/database.sqlite`. When that file does not exist, the Node API creates a fresh database from `database/schema.sql`.
 
-## cPanel Notes
-
-Use MySQL in `.env`:
-
-```env
-DB_CONNECTION=mysql
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_DATABASE=your_cpanel_database
-DB_USERNAME=your_cpanel_user
-DB_PASSWORD=your_cpanel_password
-```
-
-Point the domain or subdomain document root to Laravel's `public` directory. After uploading, run:
+## Production
 
 ```bash
-composer install --no-dev --optimize-autoloader
-php artisan key:generate
-php artisan migrate --force
-php artisan db:seed --force
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
+npm ci
+npm run build
+npm start
 ```
 
-For inbox syncing, enable the PHP `imap` extension in cPanel's PHP extension selector. Typical cPanel mailbox settings are:
+The Node API serves both `/api` and the production React build from `apps/web/dist`.
 
-```text
-IMAP host: mail.yourdomain.co.za
-IMAP port: 993
-IMAP encryption: SSL
-Username: full email address
-Password: mailbox password
+Set these production values in `.env`:
+
+```env
+NODE_ENV=production
+NODE_API_PORT=4000
+NODE_PUBLIC_BASE_URL=https://mailcore.example.com
+REACT_WEB_ORIGIN=https://mailcore.example.com
+VITE_API_BASE_URL=https://mailcore.example.com/api
+NODE_AUTH_SECRET=replace-with-a-long-random-secret
+NODE_ENCRYPTION_KEY=base64:replace-with-a-base64-encoded-32-byte-key
+DB_CONNECTION=sqlite
+DB_DATABASE=/absolute/path/to/database/database.sqlite
 ```
+
+Existing installations should set `NODE_ENCRYPTION_KEY` to their previous application encryption key so saved SMTP and IMAP credentials remain readable.
 
 ## Integration API
 
-Create an API key in **API Keys** and enable the abilities your integration needs:
+Create an API key in the dashboard and grant the required abilities:
 
-- `send` sends templated emails and lists sending accounts.
-- `templates` lists active templates for the key's client.
-- `inbox` reads received emails for the key's client.
+- `send`: send email and list sending accounts
+- `templates`: list and read active templates
+- `inbox`: list, read, and update inbox messages
 
-Keep API keys on your server. Do not expose them in public browser JavaScript.
-
-Use bearer authentication:
+Use the key as a bearer token:
 
 ```bash
-Authorization: Bearer pmc_your_api_key
+curl https://mailcore.example.com/api/templates \
+  -H "Authorization: Bearer pmc_your_api_key"
 ```
 
-### Send Email
-
-`POST /api/send`
+Send a templated email:
 
 ```bash
-curl -X POST https://your-app.example.com/api/send \
+curl -X POST https://mailcore.example.com/api/send \
   -H "Authorization: Bearer pmc_your_api_key" \
   -H "Content-Type: application/json" \
   -d '{
-    "from_email": "info@beestack.co.za",
-    "to": "client@gmail.com",
-    "subject": "Welcome to BeeStack",
+    "from_email": "info@example.com",
+    "to": "client@example.com",
+    "subject": "Welcome",
     "template_key": "welcome",
-    "data": { "name": "John" }
+    "data": { "name": "Client" }
   }'
 ```
 
-```json
-{
-  "message": "Email sent.",
-  "log_id": 1,
-  "status": "sent"
-}
-```
-
-### Templates
-
-```bash
-curl https://your-app.example.com/api/templates \
-  -H "Authorization: Bearer pmc_your_api_key"
-
-curl https://your-app.example.com/api/templates/welcome \
-  -H "Authorization: Bearer pmc_your_api_key"
-```
-
-### Sending Accounts
-
-```bash
-curl https://your-app.example.com/api/sending-accounts \
-  -H "Authorization: Bearer pmc_your_api_key"
-```
-
-Use one of the returned `email` values as `from_email` when calling `/api/send`.
-
-### Received Emails
-
-```bash
-curl "https://your-app.example.com/api/inbox?status=unopened&mailbox=inbox" \
-  -H "Authorization: Bearer pmc_your_api_key"
-
-curl https://your-app.example.com/api/inbox/123 \
-  -H "Authorization: Bearer pmc_your_api_key"
-
-curl -X PATCH https://your-app.example.com/api/inbox/123/opened \
-  -H "Authorization: Bearer pmc_your_api_key"
-```
-
-Supported inbox filters:
-
-- `status`: `all`, `opened`, `unopened`
-- `mailbox`: `inbox`, `spam`, `sent`, `drafts`, `trash`, `archive`
-
-API keys are stored as SHA-256 hashes. SMTP passwords are stored using Laravel's encrypted cast.
+Keep API keys on trusted servers and never expose them in public browser code.

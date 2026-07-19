@@ -2,15 +2,20 @@
     "$schema": "https://www.schemastore.org/package.json",
     "private": true,
     "type": "module",
+    "workspaces": [
+        "apps/api",
+        "apps/web"
+    ],
     "scripts": {
-        "build": "vite build",
-        "dev": "vite"
+        "build": "npm run build:web",
+        "dev": "npm run stage:dev",
+        "dev:api": "npm --workspace apps/api run dev",
+        "dev:web": "npm --workspace apps/web run dev",
+        "build:web": "npm --workspace apps/web run build",
+        "start": "npm --workspace apps/api run start",
+        "stage:dev": "concurrently -c \"#60a5fa,#34d399\" \"npm run dev:api\" \"npm run dev:web\" --names=node-api,react-web --kill-others"
     },
     "devDependencies": {
-        "@tailwindcss/vite": "^4.0.0",
-        "concurrently": "^9.0.1",
-        "laravel-vite-plugin": "^3.1",
-        "tailwindcss": "^4.0.0",
-        "vite": "^8.0.0"
+        "concurrently": "^9.0.1"
     }
 }
