@@ -12,7 +12,7 @@ README 2.md
 /.phpunit.cache
 /.vscode
 /.zed
-/node_modules
+node_modules/
 /.npm
 /apps/web/dist
 /apps/api/database/*.sqlite

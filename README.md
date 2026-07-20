@@ -57,7 +57,7 @@ Railway provides.
 
 Use these service settings:
 
-- Build command: `npm ci && npm run build`
+- Build command: `npm run build` (Railpack runs `npm ci` in its install step)
 - Start command: `npm start`
 - Healthcheck path: `/api/health`
 - Do not set `PORT`; Railway supplies it automatically.
