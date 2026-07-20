@@ -852,10 +852,10 @@ if (fs.existsSync(path.join(webDistPath, 'index.html'))) {
 app.use((error, _request, response, _next) => {
   console.error(error);
   const status = error.status || 500;
+  const message = status >= 500 && !error.expose ? 'Internal Server Error' : error.message;
 
   response.status(status).json({
-    error: status >= 500 ? 'Internal Server Error' : error.message,
-    message: error.message,
+    error: message,
   });
 });
 

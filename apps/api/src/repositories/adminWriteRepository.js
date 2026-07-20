@@ -95,6 +95,16 @@ function intInRange(value, field, fallback = null) {
   return number;
 }
 
+function mailHost(value, field) {
+  const host = requireString(value, field);
+
+  if (/^\d+$/.test(host) || /^(?:https?|ssl|tls):\/\//i.test(host) || /\s/.test(host)) {
+    throw validationError(`${field} must be a server hostname, for example mail.example.com.`);
+  }
+
+  return host;
+}
+
 function ensureDomainForClient(domainId, clientId) {
   const domain = getDb().prepare('SELECT id FROM domains WHERE id = @domainId AND client_id = @clientId')
     .get({ domainId, clientId });
@@ -161,7 +171,7 @@ function accountPayload(user, payload, current = null) {
   }
 
   if (inboxEnabled) {
-    requireString(payload.imap_host ?? current?.imap_host, 'IMAP host');
+    mailHost(payload.imap_host ?? current?.imap_host, 'IMAP host');
     requireString(payload.imap_username ?? current?.imap_username, 'IMAP username');
   }
 
@@ -170,14 +180,16 @@ function accountPayload(user, payload, current = null) {
     domainId,
     email,
     fromName: cleanString(payload.from_name ?? current?.from_name),
-    smtpHost: requireString(payload.smtp_host ?? current?.smtp_host, 'SMTP host'),
+    smtpHost: mailHost(payload.smtp_host ?? current?.smtp_host, 'SMTP host'),
     smtpPort: intInRange(payload.smtp_port ?? current?.smtp_port, 'SMTP port'),
     smtpEncryption,
     smtpUsername: requireString(payload.smtp_username ?? current?.smtp_username, 'SMTP username'),
     smtpPassword: smtpPassword ? encryptStoredSecret(smtpPassword) : existingSmtpPassword,
     isActive: payload.is_active === undefined ? (current?.is_active ?? 1) : (payload.is_active ? 1 : 0),
     inboxEnabled,
-    imapHost: cleanString(payload.imap_host ?? current?.imap_host),
+    imapHost: inboxEnabled
+      ? mailHost(payload.imap_host ?? current?.imap_host, 'IMAP host')
+      : cleanString(payload.imap_host ?? current?.imap_host),
     imapPort: intInRange(payload.imap_port ?? current?.imap_port, 'IMAP port', 993),
     imapEncryption,
     imapUsername: cleanString(payload.imap_username ?? current?.imap_username),

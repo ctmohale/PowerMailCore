@@ -1,14 +1,28 @@
 import crypto from 'node:crypto';
 import { config } from './config.js';
 
+function encryptionConfigurationError() {
+  const error = new Error(
+    'Email credential encryption is not configured. Set NODE_ENCRYPTION_KEY to a base64-encoded 32-byte key and restart the application.',
+  );
+  error.status = 503;
+  error.expose = true;
+  return error;
+}
+
 function encryptionKey() {
   const configuredKey = config.encryptionKey;
+
+  if (!configuredKey) {
+    throw encryptionConfigurationError();
+  }
+
   const key = configuredKey.startsWith('base64:')
     ? Buffer.from(configuredKey.slice(7), 'base64')
     : Buffer.from(configuredKey);
 
   if (![16, 32].includes(key.length)) {
-    throw new Error('NODE_ENCRYPTION_KEY must contain a valid 16-byte or 32-byte key.');
+    throw encryptionConfigurationError();
   }
 
   return key;
