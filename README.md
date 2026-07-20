@@ -96,6 +96,61 @@ deployed as separate services, set `VITE_API_BASE_URL` on the frontend service
 to `https://YOUR-BACKEND-DOMAIN/api` before building, and set
 `REACT_WEB_ORIGIN` on the backend to the frontend's exact HTTPS origin.
 
+## cPanel Deployment
+
+PowerMail can run as one cPanel Node.js/Passenger application. Use Node.js 20
+or newer, set the application root to the Git checkout, and set the startup
+file to `app.js`. Passenger supplies `PORT`; do not hard-code it in cPanel.
+
+From the cPanel terminal, clone and build the application:
+
+```bash
+cd "$HOME"
+git clone https://github.com/ctmohale/PowerMailCore.git powermail
+mkdir -p "$HOME/powermail-data"
+chmod 700 "$HOME/powermail-data"
+cd "$HOME/powermail"
+npm ci
+npm run build
+```
+
+Create `$HOME/powermail/.env` with production values. Keep the SQLite database
+outside the Git checkout so pulls and deployments cannot replace it:
+
+```env
+NODE_ENV=production
+NODE_PUBLIC_BASE_URL=https://mail.example.com
+REACT_WEB_ORIGIN=https://mail.example.com
+NODE_AUTH_SECRET=replace-with-a-long-random-secret
+NODE_ENCRYPTION_KEY=base64:replace-with-a-base64-encoded-32-byte-key
+DB_CONNECTION=sqlite
+DB_DATABASE=/home/CPANEL_USERNAME/powermail-data/database.sqlite
+```
+
+For an existing database, reuse the exact previous `NODE_ENCRYPTION_KEY` or
+saved SMTP/IMAP passwords will not decrypt. For a new installation, generate
+the two secrets once with:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+node -e "console.log('base64:' + require('crypto').randomBytes(32).toString('base64'))"
+```
+
+After a Git update, rebuild and restart Passenger:
+
+```bash
+cd "$HOME/powermail"
+git pull --ff-only
+npm ci
+npm run build
+mkdir -p tmp
+touch tmp/restart.txt
+```
+
+The database directory and `.env` are not tracked by Git. Back up
+`$HOME/powermail-data/database.sqlite` separately before application or schema
+updates.
+
 ## Integration API
 
 Create an API key in the dashboard and grant the required abilities:
