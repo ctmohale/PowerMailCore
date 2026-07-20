@@ -98,58 +98,52 @@ to `https://YOUR-BACKEND-DOMAIN/api` before building, and set
 
 ## cPanel Deployment
 
-PowerMail can run as one cPanel Node.js/Passenger application. Use Node.js 20
-or newer, set the application root to the Git checkout, and set the startup
-file to `app.js`. Passenger supplies `PORT`; do not hard-code it in cPanel.
+Use the supplied `PowerMailCore-cPanel.zip`. It already contains the compiled
+React frontend.
 
-From the cPanel terminal, clone and build the application:
+1. Open **cPanel > File Manager**.
+2. Create `/home/CPANEL_USERNAME/powermail` outside `public_html`.
+3. Upload the ZIP into that folder and extract it. `app.js` and `package.json`
+   must be directly inside the `powermail` folder.
+4. Create `/home/CPANEL_USERNAME/powermail-data` for the database.
+5. Open **Setup Node.js App** or **Application Manager** and create the app:
 
-```bash
-cd "$HOME"
-git clone https://github.com/ctmohale/PowerMailCore.git powermail
-mkdir -p "$HOME/powermail-data"
-chmod 700 "$HOME/powermail-data"
-cd "$HOME/powermail"
-npm ci
-npm run build
-```
+   | Setting | Value |
+   | --- | --- |
+   | Node.js version | 20 or 22 |
+   | Application mode | Production |
+   | Application root | `powermail` |
+   | Application URL | Your HTTPS domain or subdomain |
+   | Startup file | `app.js` |
 
-Create `$HOME/powermail/.env` with production values. Keep the SQLite database
-outside the Git checkout so pulls and deployments cannot replace it:
+6. Add these environment variables in the Node.js app screen:
 
-```env
-NODE_ENV=production
-NODE_PUBLIC_BASE_URL=https://mail.example.com
-REACT_WEB_ORIGIN=https://mail.example.com
-NODE_AUTH_SECRET=replace-with-a-long-random-secret
-NODE_ENCRYPTION_KEY=base64:replace-with-a-base64-encoded-32-byte-key
-DB_CONNECTION=sqlite
-DB_DATABASE=/home/CPANEL_USERNAME/powermail-data/database.sqlite
-```
+   ```env
+   NODE_ENV=production
+   NODE_PUBLIC_BASE_URL=https://YOUR-DOMAIN
+   REACT_WEB_ORIGIN=https://YOUR-DOMAIN
+   NODE_AUTH_SECRET=YOUR_RANDOM_SECRET
+   NODE_ENCRYPTION_KEY=base64:YOUR_32_BYTE_BASE64_KEY
+   DB_CONNECTION=sqlite
+   DB_DATABASE=/home/CPANEL_USERNAME/powermail-data/database.sqlite
+   ADMIN_NAME=PowerMail Admin
+   ADMIN_EMAIL=YOUR_ADMIN_EMAIL
+   ADMIN_PASSWORD=YOUR_NEW_ADMIN_PASSWORD
+   ```
 
-For an existing database, reuse the exact previous `NODE_ENCRYPTION_KEY` or
-saved SMTP/IMAP passwords will not decrypt. For a new installation, generate
-the two secrets once with:
+7. Do not add `PORT`; cPanel supplies it automatically.
+8. Click **Run NPM Install**, wait for it to finish, and click **Restart App**.
+9. Visit `https://YOUR-DOMAIN/api/health`. A working installation returns JSON
+   containing `"ok": true`.
 
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-node -e "console.log('base64:' + require('crypto').randomBytes(32).toString('base64'))"
-```
+For an existing database, upload it as
+`/home/CPANEL_USERNAME/powermail-data/database.sqlite` and reuse its exact
+previous `NODE_ENCRYPTION_KEY`. Never share or change that key after saving
+SMTP or IMAP passwords.
 
-After a Git update, rebuild and restart Passenger:
-
-```bash
-cd "$HOME/powermail"
-git pull --ff-only
-npm ci
-npm run build
-mkdir -p tmp
-touch tmp/restart.txt
-```
-
-The database directory and `.env` are not tracked by Git. Back up
-`$HOME/powermail-data/database.sqlite` separately before application or schema
-updates.
+Before an update, download a backup of `database.sqlite`. Upload and extract
+the new cPanel ZIP into `powermail`, click **Run NPM Install**, and restart the
+app. The ZIP never contains a database or `.env` file.
 
 ## Integration API
 

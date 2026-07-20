@@ -1,130 +1,90 @@
-# cPanel React/Node Deployment
+# Simple cPanel Installation
 
-PowerMail runs as one Node.js application. Express serves the API and the compiled React app from the same domain.
+PowerMail runs as one Node.js application. The API and React website use the
+same domain.
 
-## Requirements
+## What You Need
 
-- A cPanel account with Terminal or SSH access.
-- **Setup Node.js App** or **Application Manager** enabled by the hosting provider.
-- Node.js 20 or newer.
-- A domain or subdomain with SSL, for example `mailcore.example.com`.
+- cPanel **Setup Node.js App** or **Application Manager**
+- Node.js 20 or 22
+- An HTTPS domain or subdomain
+- `PowerMailCore-cPanel.zip`
 
-Do not use `public_html` as the application root. Keep the source, `.env`, and SQLite database in a private home-directory path such as `/home/CPANEL_USER/powermail-core`.
+## 1. Upload The ZIP
 
-## 1. Upload The Repository
+1. Open **cPanel > File Manager**.
+2. Create `/home/CPANEL_USERNAME/powermail` outside `public_html`.
+3. Upload `PowerMailCore-cPanel.zip` into that folder.
+4. Extract the ZIP.
+5. Confirm that `app.js` and `package.json` are directly inside `powermail`.
+6. Create `/home/CPANEL_USERNAME/powermail-data` for the database.
 
-Use **Git Version Control** to clone the repository into:
+Replace `CPANEL_USERNAME` with the username shown in your cPanel account.
 
-```text
-/home/CPANEL_USER/powermail-core
-```
+## 2. Create The Node.js App
 
-Alternatively, upload a release archive and extract it there. Make sure the current changes are committed and pushed before deploying with Git.
-
-## 2. Configure Production
-
-From cPanel Terminal:
-
-```bash
-cd /home/CPANEL_USER/powermail-core
-cp .env.cpanel.example .env
-```
-
-Edit `.env` and replace every placeholder:
-
-```dotenv
-APP_NAME="PowerMail Core"
-NODE_ENV=production
-NODE_PUBLIC_BASE_URL=https://mailcore.example.com
-REACT_WEB_ORIGIN=https://mailcore.example.com
-VITE_API_BASE_URL=https://mailcore.example.com/api
-NODE_AUTH_SECRET=REPLACE_WITH_RANDOM_SECRET
-NODE_ENCRYPTION_KEY=base64:REPLACE_WITH_32_BYTE_BASE64_KEY
-DB_CONNECTION=sqlite
-DB_DATABASE=/home/CPANEL_USER/powermail-core/database/database.sqlite
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-4.1-mini
-OPENAI_BASE_URL=https://api.openai.com/v1
-```
-
-Generate new secrets for a new installation:
-
-```bash
-openssl rand -hex 32
-openssl rand -base64 32
-```
-
-Prefix the second value with `base64:` when setting `NODE_ENCRYPTION_KEY`.
-
-For an existing PowerMail database, use the same encryption key as the existing installation. Changing it makes stored SMTP and IMAP passwords unreadable.
-
-## 3. Preserve Or Create The Database
-
-For the existing installation, upload `database/database.sqlite` separately because it is not normally committed to Git. Back it up before every deployment.
-
-For a new installation, the deploy script creates an empty SQLite database from `database/schema.sql`.
-
-The application user needs write access:
-
-```bash
-chmod 750 database
-chmod 640 database/database.sqlite
-```
-
-## 4. Install And Build
-
-Run:
-
-```bash
-cd /home/CPANEL_USER/powermail-core
-bash scripts/cpanel-deploy.sh
-```
-
-This command installs npm packages, builds React, initializes SQLite when necessary, and creates `tmp/restart.txt` for Passenger.
-
-If `better-sqlite3` cannot install, ask the hosting provider to enable the Node.js build tools required for native npm packages.
-
-## 5. Register The Node Application
-
-Open **Setup Node.js App** or **Application Manager** and configure:
+Open **Setup Node.js App** or **Application Manager** and enter:
 
 | Setting | Value |
 | --- | --- |
-| Node.js version | 20 or newer |
+| Node.js version | 20 or 22 |
 | Application mode | Production |
-| Application root | `powermail-core` |
-| Application URL | `https://mailcore.example.com` |
-| Startup file | `apps/api/src/server.js` |
+| Application root | `powermail` |
+| Application URL | Your HTTPS domain or subdomain |
+| Startup file | `app.js` |
 
-Do not configure a fixed production port. cPanel Passenger supplies the port to the app.
+Do not create a `PORT` variable. cPanel supplies the correct port.
 
-After saving, click **Restart Application**. If that control is unavailable, run:
+## 3. Add Environment Variables
+
+Add each variable in the Node.js application screen:
+
+```env
+NODE_ENV=production
+NODE_PUBLIC_BASE_URL=https://YOUR-DOMAIN
+REACT_WEB_ORIGIN=https://YOUR-DOMAIN
+NODE_AUTH_SECRET=YOUR_RANDOM_SECRET
+NODE_ENCRYPTION_KEY=base64:YOUR_32_BYTE_BASE64_KEY
+DB_CONNECTION=sqlite
+DB_DATABASE=/home/CPANEL_USERNAME/powermail-data/database.sqlite
+ADMIN_NAME=PowerMail Admin
+ADMIN_EMAIL=YOUR_ADMIN_EMAIL
+ADMIN_PASSWORD=YOUR_NEW_ADMIN_PASSWORD
+```
+
+Use the exact old `NODE_ENCRYPTION_KEY` when moving an existing database.
+Changing it makes saved SMTP and IMAP passwords unreadable.
+
+For a new installation, generate the secrets in cPanel Terminal:
 
 ```bash
-mkdir -p /home/CPANEL_USER/powermail-core/tmp
-touch /home/CPANEL_USER/powermail-core/tmp/restart.txt
+node -e "const c=require('crypto'); console.log('NODE_AUTH_SECRET='+c.randomBytes(32).toString('hex')); console.log('NODE_ENCRYPTION_KEY=base64:'+c.randomBytes(32).toString('base64'))"
 ```
 
-## 6. Verify
+Keep these values private.
 
-Open these URLs:
+## 4. Install And Start
 
-```text
-https://mailcore.example.com/api/health
-https://mailcore.example.com/
-https://mailcore.example.com/book/CLIENT-SLUG
+1. Click **Run NPM Install**.
+2. Wait until installation finishes successfully.
+3. Click **Restart App**.
+4. Open `https://YOUR-DOMAIN/api/health`.
+
+A working installation returns JSON containing:
+
+```json
+{"ok":true}
 ```
 
-The health endpoint should return JSON containing `"ok":true` and `"runtime":"node"`.
+Then open `https://YOUR-DOMAIN` and sign in.
 
-## Future Updates
+## Updating Later
 
-After pulling a new version, run:
+1. Download a backup of
+   `/home/CPANEL_USERNAME/powermail-data/database.sqlite`.
+2. Upload and extract the new cPanel ZIP into the existing `powermail` folder.
+3. Click **Run NPM Install**.
+4. Click **Restart App**.
 
-```bash
-cd /home/CPANEL_USER/powermail-core
-git pull --ff-only
-bash scripts/cpanel-deploy.sh
-```
-
-The checked-in `.cpanel.yml` can also run the deployment script through cPanel **Git Version Control > Pull or Deploy > Deploy HEAD Commit**. cPanel requires `.cpanel.yml` at the repository root and a clean working tree for this deployment method.
+The cPanel ZIP excludes databases, `.env` files, Git history, and
+`node_modules`, so an application update does not replace the database.
