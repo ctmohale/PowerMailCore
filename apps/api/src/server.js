@@ -31,6 +31,7 @@ import { requireAdmin, requireAuth, requirePermission } from './auth/middleware.
 import { createToken } from './auth/tokens.js';
 import { config } from './config.js';
 import { getDb } from './database.js';
+import { bootstrapAdmin } from './bootstrapAdmin.js';
 import {
   dashboardSummary,
   inboxUnreadCount,
@@ -862,6 +863,8 @@ app.use((error, _request, response, _next) => {
     error: message,
   });
 });
+
+bootstrapAdmin();
 
 app.listen(config.apiPort, '0.0.0.0', () => {
   console.log(`PowerMail Node API listening on 0.0.0.0:${config.apiPort}`);

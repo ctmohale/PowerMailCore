@@ -69,11 +69,19 @@ NODE_ENV=production
 NODE_AUTH_SECRET=replace-with-a-long-random-secret
 NODE_ENCRYPTION_KEY=base64:replace-with-a-base64-encoded-32-byte-key
 DB_CONNECTION=sqlite
+ADMIN_NAME=PowerMail Admin
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=replace-with-a-strong-initial-password
 ```
 
 Generate suitable secrets locally with `openssl rand -hex 32` and
 `openssl rand -base64 32`. Do not change `NODE_ENCRYPTION_KEY` after storing
 email credentials.
+
+When `ADMIN_EMAIL` and `ADMIN_PASSWORD` are present, startup creates that
+administrator only if the email does not already exist. Later restarts do not
+reset its password. Keep these values in Railway Variables and never commit
+the production password.
 
 Attach a Railway Volume to this service at `/data`. The API automatically uses
 `RAILWAY_VOLUME_MOUNT_PATH/database.sqlite`, so `DB_DATABASE` is not required.

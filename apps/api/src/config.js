@@ -26,6 +26,11 @@ export const config = {
   webOrigin: cleanEnv(process.env.REACT_WEB_ORIGIN, 'http://127.0.0.1:5174'),
   encryptionKey: cleanEnv(process.env.NODE_ENCRYPTION_KEY || process.env.APP_KEY, ''),
   authSecret: cleanEnv(process.env.NODE_AUTH_SECRET || process.env.APP_KEY, 'powermail-local-node-secret'),
+  bootstrapAdmin: {
+    name: cleanEnv(process.env.ADMIN_NAME, 'PowerMail Admin'),
+    email: cleanEnv(process.env.ADMIN_EMAIL, '').toLowerCase(),
+    password: cleanEnv(process.env.ADMIN_PASSWORD, ''),
+  },
   openai: {
     key: cleanEnv(process.env.OPENAI_API_KEY, ''),
     model: cleanEnv(process.env.OPENAI_MODEL, 'gpt-4.1-mini'),
