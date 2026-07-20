@@ -146,13 +146,13 @@ function writeLine(socket, line) {
   socket.write(`${line}\r\n`);
 }
 
-async function command(socket, bufferState, line, expectedCodes) {
+async function command(socket, bufferState, line, expectedCodes, commandName = null) {
   writeLine(socket, line);
   const response = await readResponse(socket, bufferState);
   const expected = Array.isArray(expectedCodes) ? expectedCodes : [expectedCodes];
 
   if (!expected.includes(response.code)) {
-    throw smtpError(`SMTP command failed (${line.split(' ')[0]})`, response);
+    throw smtpError(`SMTP command failed (${commandName || line.split(' ')[0]})`, response);
   }
 
   return response;
@@ -210,8 +210,20 @@ async function establishSession(account) {
 
   if (account.smtp_username || account.smtp_password) {
     await command(socket, bufferState, 'AUTH LOGIN', [334]);
-    await command(socket, bufferState, Buffer.from(String(account.smtp_username || '')).toString('base64'), [334]);
-    await command(socket, bufferState, Buffer.from(String(account.smtp_password || '')).toString('base64'), [235]);
+    await command(
+      socket,
+      bufferState,
+      Buffer.from(String(account.smtp_username || '')).toString('base64'),
+      [334],
+      'AUTH username',
+    );
+    await command(
+      socket,
+      bufferState,
+      Buffer.from(String(account.smtp_password || '')).toString('base64'),
+      [235],
+      'AUTH credentials',
+    );
   }
 
   return { socket, bufferState };

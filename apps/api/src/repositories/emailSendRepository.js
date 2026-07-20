@@ -186,6 +186,42 @@ function accountForSmtp(account) {
   };
 }
 
+function smtpVerificationMessage(error) {
+  const code = String(error?.code || '');
+  const responseCode = Number(error?.smtpResponse?.code || 0);
+  const message = String(error?.message || '');
+
+  if (['ENOTFOUND', 'EAI_AGAIN'].includes(code)) {
+    return 'SMTP server hostname could not be resolved. Check the SMTP Host.';
+  }
+
+  if (code === 'ECONNREFUSED') {
+    return 'SMTP server refused the connection. Check the SMTP Host, port, and encryption setting.';
+  }
+
+  if (code === 'ETIMEDOUT' || /timed out/i.test(message)) {
+    return 'SMTP connection timed out. Check the SMTP Host, port, and firewall settings.';
+  }
+
+  if (
+    code.startsWith('CERT_')
+    || code.startsWith('ERR_TLS_')
+    || /certificate|tls|ssl/i.test(message)
+  ) {
+    return 'SMTP TLS/SSL verification failed. Check the SMTP Host and encryption setting.';
+  }
+
+  if ([534, 535].includes(responseCode) || /AUTH credentials|authentication/i.test(message)) {
+    return 'SMTP authentication failed. Check the SMTP username and password.';
+  }
+
+  if (responseCode >= 400) {
+    return `SMTP server rejected verification (response ${responseCode}). Check the account settings.`;
+  }
+
+  return 'SMTP verification failed. Check the SMTP Host, port, encryption, username, and password.';
+}
+
 function createFailedLog(clientId, payload, errorMessage, account = null, apiKey = null) {
   const now = nowSql();
   const result = getDb().prepare(`
@@ -620,7 +656,28 @@ export async function verifyAccountForUser(user, id) {
   }
 
   assertTenant(user, account.client_id);
-  await verifySmtpAccount(accountForSmtp(account));
+  let smtpAccount;
+
+  try {
+    smtpAccount = accountForSmtp(account);
+  } catch (error) {
+    if (error?.expose) {
+      throw error;
+    }
+
+    throw httpError(
+      'The saved SMTP password could not be decrypted. Edit the account and re-enter the SMTP password.',
+      422,
+      { cause: error },
+    );
+  }
+
+  try {
+    await verifySmtpAccount(smtpAccount);
+  } catch (error) {
+    throw httpError(smtpVerificationMessage(error), 422, { cause: error });
+  }
+
   getDb().prepare('UPDATE email_accounts SET last_verified_at = @now, updated_at = @now WHERE id = @id')
     .run({ id: account.id, now: nowSql() });
 
