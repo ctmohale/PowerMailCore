@@ -20,7 +20,7 @@ function cleanEnv(value, fallback = '') {
 export const config = {
   appName: cleanEnv(process.env.APP_NAME, 'PowerMail Core'),
   appUrl: cleanEnv(process.env.NODE_PUBLIC_BASE_URL || process.env.APP_URL, 'http://127.0.0.1:4000'),
-  apiPort: Number(cleanEnv(process.env.NODE_API_PORT, '4000')),
+  apiPort: Number(cleanEnv(process.env.PORT || process.env.NODE_API_PORT, '4000')),
   webOrigin: cleanEnv(process.env.REACT_WEB_ORIGIN, 'http://127.0.0.1:5174'),
   encryptionKey: cleanEnv(process.env.NODE_ENCRYPTION_KEY || process.env.APP_KEY, ''),
   authSecret: cleanEnv(process.env.NODE_AUTH_SECRET || process.env.APP_KEY, 'powermail-local-node-secret'),

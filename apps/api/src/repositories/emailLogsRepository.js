@@ -191,14 +191,14 @@ export function showEmailLog(id, user) {
 export function listClients(user) {
   if (isAdmin(user)) {
     return getDb().prepare(`
-      SELECT id, name
+      SELECT id, name, slug
       FROM clients
       ORDER BY name ASC
     `).all();
   }
 
   return getDb().prepare(`
-    SELECT id, name
+    SELECT id, name, slug
     FROM clients
     WHERE id = @clientId
     ORDER BY name ASC

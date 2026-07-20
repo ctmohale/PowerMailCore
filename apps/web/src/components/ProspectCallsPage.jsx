@@ -89,7 +89,7 @@ export function ProspectCallsPage() {
   }, [load]);
 
   const events = useMemo(() => rows.flatMap((row) => {
-    const title = row.contactName || row.companyName;
+    const title = row.companyName || row.contactName;
     const callDate = asDate(row.callDate, true);
     const callEvents = row.callDate ? [{
       id: `call-${row.id}`,

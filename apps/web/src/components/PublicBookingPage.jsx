@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { addDays, format, startOfWeek } from 'date-fns';
 import { apiGet, apiPost } from '../api/client.js';
 
 function routeParts() {
@@ -29,6 +30,7 @@ export function PublicBookingPage() {
   const [page, setPage] = useState({ client: null, slots: [] });
   const [confirmation, setConfirmation] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
+  const [weekStart, setWeekStart] = useState(null);
   const [form, setForm] = useState({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -48,6 +50,10 @@ export function PublicBookingPage() {
           setConfirmation(response);
         } else {
           setPage(response);
+          setWeekStart((current) => current || startOfWeek(
+            response.slots?.length ? new Date(response.slots[0].startsAt.replace(' ', 'T')) : new Date(),
+            { weekStartsOn: 1 },
+          ));
         }
       })
       .catch((requestError) => setError(requestError.message))
@@ -110,6 +116,10 @@ export function PublicBookingPage() {
     );
   }
 
+  const activeWeekStart = weekStart || startOfWeek(new Date(), { weekStartsOn: 1 });
+  const weekDays = Array.from({ length: 7 }, (_, index) => addDays(activeWeekStart, index));
+  const slotDay = (slot) => format(new Date(slot.startsAt.replace(' ', 'T')), 'yyyy-MM-dd');
+
   return (
     <main className="public-booking-shell">
       <section className="public-booking-card">
@@ -120,15 +130,39 @@ export function PublicBookingPage() {
 
         {error && <div className="alert">{error}</div>}
 
-        <div className="public-slot-grid">
-          {page.slots.length === 0 ? (
-            <div className="empty-state">No available meeting times are open right now.</div>
-          ) : page.slots.map((slot) => (
-            <button className="slot-button" type="button" key={slot.id} onClick={() => setSelectedSlot(slot)}>
-              <strong>{formatSlot(slot.startsAt)}</strong>
-              <span>{slot.title} · {slot.durationMinutes} min{slot.location ? ` · ${slot.location}` : ''}</span>
-            </button>
-          ))}
+        <div className="public-week-toolbar">
+          <div className="public-week-navigation" role="group" aria-label="Booking week">
+            <button type="button" onClick={() => setWeekStart(addDays(activeWeekStart, -7))}>Previous</button>
+            <button type="button" onClick={() => setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }))}>This week</button>
+            <button type="button" onClick={() => setWeekStart(addDays(activeWeekStart, 7))}>Next</button>
+          </div>
+          <div>
+            <strong>{format(activeWeekStart, 'dd MMM')} - {format(addDays(activeWeekStart, 6), 'dd MMM yyyy')}</strong>
+            <span>Only available meeting times are shown.</span>
+          </div>
+        </div>
+
+        <div className="public-week-grid">
+          {weekDays.map((day) => {
+            const daySlots = page.slots.filter((slot) => slotDay(slot) === format(day, 'yyyy-MM-dd'));
+            return (
+              <section className="public-week-day" key={day.toISOString()}>
+                <header>
+                  <span>{format(day, 'EEE')}</span>
+                  <strong>{format(day, 'dd')}</strong>
+                </header>
+                <div>
+                  {daySlots.length ? daySlots.map((slot) => (
+                    <button className="slot-button" type="button" key={slot.id} onClick={() => setSelectedSlot(slot)}>
+                      <strong>{format(new Date(slot.startsAt.replace(' ', 'T')), 'HH:mm')}</strong>
+                      <span>{slot.title}</span>
+                      <small>{slot.durationMinutes} min{slot.location ? `, ${slot.location}` : ''}</small>
+                    </button>
+                  )) : <span className="public-no-slots">No times</span>}
+                </div>
+              </section>
+            );
+          })}
         </div>
       </section>
 

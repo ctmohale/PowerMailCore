@@ -330,7 +330,7 @@ function filteredResourceStats(resourceId, query, user) {
     audiences: () => ({ total, contacts: sum('contactCount'), populated: count((row) => Number(row.contactCount || 0) > 0), campaigns: sum('campaignCount') }),
     campaigns: () => ({ total, recipients: sum('totalRecipients'), sent: sum('sentCount'), failed: sum('failedCount') }),
     'lead-runs': () => ({ total, discovered: sum('discoveredCount'), imported: sum('importedCount'), completed: count(statusIs('completed')) }),
-    'prospect-calls': () => ({ total, followUp: count(statusIs('follow_up')), meetings: count(statusIs('meeting_booked')), won: count(statusIs('won')) }),
+    'prospect-calls': () => ({ total, followUp: count((row) => Boolean(row.followUpAt)), meetings: count(statusIs('meeting_booked')), won: count(statusIs('won')) }),
     'booking-slots': () => ({ total, available: count(statusIs('available')), booked: count((row) => Boolean(row.bookedBy) || row.status === 'booked'), blocked: count(statusIs('blocked')) }),
     'booking-appointments': () => ({ total, booked: count(statusIs('booked')), completed: count(statusIs('completed')), cancelled: count(statusIs('cancelled')) }),
   };

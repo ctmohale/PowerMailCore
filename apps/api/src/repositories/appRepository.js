@@ -796,7 +796,8 @@ export function listBookingAppointments(query, user) {
       SELECT booking_appointments.id, booking_appointments.client_id AS clientId, clients.name AS clientName,
       booking_appointments.name, booking_appointments.email, booking_appointments.phone,
       booking_appointments.company, booking_appointments.status, booking_appointments.booked_at AS bookedAt,
-      booking_availabilities.title, booking_availabilities.starts_at AS startsAt
+      booking_availabilities.title, booking_availabilities.starts_at AS startsAt,
+      booking_availabilities.ends_at AS endsAt, booking_availabilities.location
     `,
     fromSql: 'FROM booking_appointments LEFT JOIN clients ON clients.id = booking_appointments.client_id LEFT JOIN booking_availabilities ON booking_availabilities.id = booking_appointments.booking_availability_id',
     searchSql: 'booking_appointments.name LIKE @search OR booking_appointments.email LIKE @search OR booking_appointments.phone LIKE @search OR booking_appointments.company LIKE @search OR booking_appointments.status LIKE @search OR clients.name LIKE @search',
