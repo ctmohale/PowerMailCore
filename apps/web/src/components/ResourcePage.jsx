@@ -68,6 +68,44 @@ function todayInputValue() {
   return `${today.getFullYear()}-${month}-${day}`;
 }
 
+function mailHostError(value, label) {
+  const host = String(value || '').trim();
+
+  if (!host) {
+    return `${label} is required.`;
+  }
+
+  if (/^\d+$/.test(host) || /^(?:https?|ssl|tls):\/\//i.test(host) || /\s/.test(host)) {
+    return `${label} must be a server hostname, for example mail.example.com.`;
+  }
+
+  return '';
+}
+
+function emailAccountFormError(form, creating) {
+  const smtpHostError = mailHostError(form.smtp_host, 'SMTP host');
+  if (smtpHostError) return smtpHostError;
+
+  if (creating && !String(form.smtp_password || '').trim()) {
+    return 'SMTP password is required.';
+  }
+
+  if (!form.inbox_enabled) return '';
+
+  const imapHostError = mailHostError(form.imap_host, 'IMAP host');
+  if (imapHostError) return imapHostError;
+
+  if (!String(form.imap_username || '').trim()) {
+    return 'IMAP username is required when inbox access is enabled.';
+  }
+
+  if (creating && !String(form.imap_password || '').trim()) {
+    return 'IMAP password is required when inbox access is enabled.';
+  }
+
+  return '';
+}
+
 function paginationItems(currentPage, lastPage) {
   if (lastPage <= 7) {
     return Array.from({ length: lastPage }, (_, index) => index + 1);
@@ -233,6 +271,14 @@ export function ResourcePage({ groupId, resourceId, initialInboxOpened = 'all' }
     setError('');
     setNotice('');
 
+    if (resource.id === 'accounts') {
+      const validationMessage = emailAccountFormError(formWithDefaults(form), true);
+      if (validationMessage) {
+        setError(validationMessage);
+        return;
+      }
+    }
+
     try {
       const response = await apiPost(resource.endpoint, formWithDefaults(form));
       if (response?.plainTextKey) {
@@ -253,6 +299,14 @@ export function ResourcePage({ groupId, resourceId, initialInboxOpened = 'all' }
     event.preventDefault();
     setError('');
     setNotice('');
+
+    if (resource.id === 'accounts') {
+      const validationMessage = emailAccountFormError(formWithDefaults(form), false);
+      if (validationMessage) {
+        setError(validationMessage);
+        return;
+      }
+    }
 
     try {
       await apiPatch(`${resource.endpoint}/${editingRow.id}`, formWithDefaults(form));
@@ -751,7 +805,15 @@ export function ResourcePage({ groupId, resourceId, initialInboxOpened = 'all' }
         ) : type === 'checkbox' ? (
           <input type="checkbox" checked={Boolean(form[name])} onChange={(event) => updateForm(name, event.target.checked)} />
         ) : (
-          <input type={type} value={form[name] || ''} onChange={(event) => updateForm(name, event.target.value)} required={required} />
+          <input
+            type={type}
+            value={form[name] || ''}
+            onChange={(event) => updateForm(name, event.target.value)}
+            required={required}
+            placeholder={name.endsWith('_host') ? 'mail.example.com' : undefined}
+            min={name.endsWith('_port') ? 1 : undefined}
+            max={name.endsWith('_port') ? 65535 : undefined}
+          />
         )}
       </label>
     );
@@ -898,6 +960,7 @@ export function ResourcePage({ groupId, resourceId, initialInboxOpened = 'all' }
             <div className="form-grid-stage">
               {resource.write.fields.map(renderField)}
             </div>
+            {error && <div className="alert">{error}</div>}
             <div className="modal-actions">
               <button type="button" className="secondary-button" onClick={() => setShowCreate(false)}>Cancel</button>
               <button type="submit" className="primary-button">Save</button>
@@ -916,6 +979,7 @@ export function ResourcePage({ groupId, resourceId, initialInboxOpened = 'all' }
             <div className="form-grid-stage">
               {resource.write.fields.map(renderField)}
             </div>
+            {error && <div className="alert">{error}</div>}
             <div className="modal-actions">
               <button type="button" className="secondary-button" onClick={() => setEditingRow(null)}>Cancel</button>
               <button type="submit" className="primary-button">Save</button>

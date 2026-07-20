@@ -79,6 +79,17 @@ export function AppDataProvider({ children }) {
     loadContacts();
   }, [loadContacts]);
 
+  useEffect(() => {
+    function refreshSharedData() {
+      loadOptions().catch(() => {});
+      loadLogs();
+      loadContacts();
+    }
+
+    window.addEventListener('powermail:data-changed', refreshSharedData);
+    return () => window.removeEventListener('powermail:data-changed', refreshSharedData);
+  }, [loadContacts, loadLogs, loadOptions]);
+
   const updateFilter = useCallback((name, value) => {
     setFilters((current) => ({
       ...current,

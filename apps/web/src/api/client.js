@@ -23,7 +23,8 @@ export function getAuthToken() {
 
 async function apiRequest(path, options = {}) {
   const requestId = ++requestSequence;
-  requestEvent('powermail:request-start', { id: requestId, method: options.method || 'GET', path });
+  const method = String(options.method || 'GET').toUpperCase();
+  requestEvent('powermail:request-start', { id: requestId, method, path });
 
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -41,11 +42,13 @@ async function apiRequest(path, options = {}) {
       throw new Error(body?.error || body?.message || `Request failed with ${response.status}`);
     }
 
-    if (response.status === 204) {
-      return null;
+    const result = response.status === 204 ? null : await response.json();
+
+    if (method !== 'GET' && method !== 'HEAD') {
+      requestEvent('powermail:data-changed', { method, path });
     }
 
-    return response.json();
+    return result;
   } finally {
     requestEvent('powermail:request-end', { id: requestId });
   }
