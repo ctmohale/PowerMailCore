@@ -9,6 +9,23 @@ const apiDir = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(apiDir, '..', '..', '..');
 const schemaPath = path.join(workspaceRoot, 'database', 'schema.sql');
 
+function assertPersistentRailwayDatabase(databasePath) {
+  if (!process.env.RAILWAY_ENVIRONMENT_ID) return;
+
+  const volumePath = String(process.env.RAILWAY_VOLUME_MOUNT_PATH || '').trim();
+
+  if (!volumePath) {
+    throw new Error('Persistent database protection: attach a Railway Volume before starting PowerMail.');
+  }
+
+  const relativePath = path.relative(path.resolve(volumePath), databasePath);
+  const isInsideVolume = relativePath && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
+
+  if (!isInsideVolume) {
+    throw new Error(`Persistent database protection: DB_DATABASE must be inside the Railway Volume at ${volumePath}.`);
+  }
+}
+
 function tableExists(database, table) {
   return Boolean(database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table));
 }
@@ -115,6 +132,7 @@ export function getDb() {
   const databasePath = path.isAbsolute(config.db.database)
     ? config.db.database
     : path.resolve(workspaceRoot, config.db.database);
+  assertPersistentRailwayDatabase(databasePath);
   fs.mkdirSync(path.dirname(databasePath), { recursive: true });
   db = new Database(databasePath);
 

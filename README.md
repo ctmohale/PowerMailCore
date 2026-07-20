@@ -86,6 +86,9 @@ the production password.
 Attach a Railway Volume to this service at `/data`. The API automatically uses
 `RAILWAY_VOLUME_MOUNT_PATH/database.sqlite`, so `DB_DATABASE` is not required.
 Without a volume, SQLite data is lost when Railway replaces the deployment.
+As a safety measure, PowerMail refuses to start on Railway when no volume is
+attached or when `DB_DATABASE` points outside the mounted volume. Git and
+Railway upload ignore rules also exclude all runtime SQLite files.
 
 The recommended single-service setup does not require `VITE_API_BASE_URL`; the
 browser uses same-origin `/api`. If the frontend and API are intentionally
