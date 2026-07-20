@@ -8,6 +8,7 @@ const workspaceRoot = path.resolve(webDir, '..', '..');
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, workspaceRoot, '');
+  const apiOrigin = env.NODE_PUBLIC_BASE_URL || 'http://127.0.0.1:4000';
 
   return {
     envDir: workspaceRoot,
@@ -19,6 +20,12 @@ export default defineConfig(({ mode }) => {
       },
       port: Number(env.VITE_DEV_PORT || 5174),
       strictPort: true,
+      proxy: {
+        '/api': {
+          target: apiOrigin,
+          changeOrigin: true,
+        },
+      },
     },
   };
 });

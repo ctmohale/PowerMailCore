@@ -15,6 +15,8 @@ README 2.md
 /node_modules
 /.npm
 /apps/web/dist
+/apps/api/database/*.sqlite
+/database/*.sqlite
 /database/*.sqlite-journal
 /database/*.sqlite-shm
 /database/*.sqlite-wal

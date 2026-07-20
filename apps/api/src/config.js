@@ -17,6 +17,8 @@ function cleanEnv(value, fallback = '') {
   return String(value).replace(/^['"]|['"]$/g, '');
 }
 
+const railwayVolumePath = cleanEnv(process.env.RAILWAY_VOLUME_MOUNT_PATH, '');
+
 export const config = {
   appName: cleanEnv(process.env.APP_NAME, 'PowerMail Core'),
   appUrl: cleanEnv(process.env.NODE_PUBLIC_BASE_URL || process.env.APP_URL, 'http://127.0.0.1:4000'),
@@ -31,6 +33,11 @@ export const config = {
   },
   db: {
     connection: cleanEnv(process.env.DB_CONNECTION, 'sqlite'),
-    database: cleanEnv(process.env.DB_DATABASE, path.join(workspaceRoot, 'database', 'database.sqlite')),
+    database: cleanEnv(
+      process.env.DB_DATABASE,
+      railwayVolumePath
+        ? path.join(railwayVolumePath, 'database.sqlite')
+        : path.join(workspaceRoot, 'database', 'database.sqlite'),
+    ),
   },
 };

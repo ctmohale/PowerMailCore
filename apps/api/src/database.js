@@ -112,7 +112,9 @@ export function getDb() {
     throw new Error(`PowerMail Node API supports sqlite only. Current DB_CONNECTION=${config.db.connection}.`);
   }
 
-  const databasePath = path.resolve(config.db.database);
+  const databasePath = path.isAbsolute(config.db.database)
+    ? config.db.database
+    : path.resolve(workspaceRoot, config.db.database);
   fs.mkdirSync(path.dirname(databasePath), { recursive: true });
   db = new Database(databasePath);
 

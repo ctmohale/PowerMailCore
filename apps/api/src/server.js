@@ -30,6 +30,7 @@ import { findUserByEmail, passwordMatches, publicUser } from './auth/authReposit
 import { requireAdmin, requireAuth, requirePermission } from './auth/middleware.js';
 import { createToken } from './auth/tokens.js';
 import { config } from './config.js';
+import { getDb } from './database.js';
 import {
   dashboardSummary,
   inboxUnreadCount,
@@ -128,10 +129,13 @@ app.use(cors({ origin: config.webOrigin }));
 app.use(express.json());
 
 app.get('/api/health', (_request, response) => {
+  getDb().prepare('SELECT 1').get();
+
   response.json({
     ok: true,
     app: config.appName,
     runtime: 'node',
+    database: 'ready',
   });
 });
 
@@ -859,6 +863,6 @@ app.use((error, _request, response, _next) => {
   });
 });
 
-app.listen(config.apiPort, () => {
-  console.log(`PowerMail Node API running on http://127.0.0.1:${config.apiPort}`);
+app.listen(config.apiPort, '0.0.0.0', () => {
+  console.log(`PowerMail Node API listening on 0.0.0.0:${config.apiPort}`);
 });

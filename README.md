@@ -49,6 +49,42 @@ DB_DATABASE=/absolute/path/to/database/database.sqlite
 
 Existing installations should set `NODE_ENCRYPTION_KEY` to their previous application encryption key so saved SMTP and IMAP credentials remain readable.
 
+## Railway Deployment
+
+Deploy the repository root as one Railway service. The root build creates the
+React bundle and the Node API serves both the frontend and `/api` from the port
+Railway provides.
+
+Use these service settings:
+
+- Build command: `npm ci && npm run build`
+- Start command: `npm start`
+- Healthcheck path: `/api/health`
+- Do not set `PORT`; Railway supplies it automatically.
+
+Set these Railway variables with persistent random values:
+
+```env
+NODE_ENV=production
+NODE_AUTH_SECRET=replace-with-a-long-random-secret
+NODE_ENCRYPTION_KEY=base64:replace-with-a-base64-encoded-32-byte-key
+DB_CONNECTION=sqlite
+```
+
+Generate suitable secrets locally with `openssl rand -hex 32` and
+`openssl rand -base64 32`. Do not change `NODE_ENCRYPTION_KEY` after storing
+email credentials.
+
+Attach a Railway Volume to this service at `/data`. The API automatically uses
+`RAILWAY_VOLUME_MOUNT_PATH/database.sqlite`, so `DB_DATABASE` is not required.
+Without a volume, SQLite data is lost when Railway replaces the deployment.
+
+The recommended single-service setup does not require `VITE_API_BASE_URL`; the
+browser uses same-origin `/api`. If the frontend and API are intentionally
+deployed as separate services, set `VITE_API_BASE_URL` on the frontend service
+to `https://YOUR-BACKEND-DOMAIN/api` before building, and set
+`REACT_WEB_ORIGIN` on the backend to the frontend's exact HTTPS origin.
+
 ## Integration API
 
 Create an API key in the dashboard and grant the required abilities:
